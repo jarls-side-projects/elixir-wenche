@@ -4,7 +4,7 @@ Elixir library for Norwegian small business filings — Maskinporten authenticat
 Altinn 3 API client, BRG XML/iXBRL generation, tax calculation, and shareholder
 register XML generation.
 
-Ported from the Python CLI tool [Wenche](https://github.com/jarlah/Wenche).
+Ported from the Python CLI tool [Wenche](https://github.com/olefredrik/Wenche).
 
 ## Modules
 
@@ -114,4 +114,4 @@ xml = Wenche.Aksjonaerregister.generate_xml(2025, company, shareholders)
 MIT — see [LICENSE](LICENSE).
 
 This project is an Elixir port of the Python tool
-[Wenche](https://github.com/jarlah/Wenche), originally licensed under the MIT License.
+[Wenche](https://github.com/olefredrik/Wenche), originally licensed under the MIT License.

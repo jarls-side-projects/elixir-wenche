@@ -41,7 +41,7 @@ defmodule Wenche.MixProject do
     Altinn 3 API client, BRG XML/iXBRL generation, tax calculation (RF-1028/RF-1167),
     and shareholder register (RF-1086) XML generation.
 
-    Ported from the Python CLI tool Wenche (https://github.com/jarlah/Wenche).
+    Ported from the Python CLI tool Wenche (https://github.com/olefredrik/Wenche).
     """
   end
 
@@ -50,7 +50,7 @@ defmodule Wenche.MixProject do
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
-        "Original (Python)" => "https://github.com/jarlah/Wenche"
+        "Original (Python)" => "https://github.com/olefredrik/Wenche"
       }
     ]
   end

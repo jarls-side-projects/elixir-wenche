@@ -2,7 +2,7 @@ defmodule Wenche do
   @moduledoc """
   Elixir library for Norwegian small business filings.
 
-  Ported from the Python CLI tool [Wenche](https://github.com/jarlah/Wenche).
+  Ported from the Python CLI tool [Wenche](https://github.com/olefredrik/Wenche).
 
   ## Modules
 
