@@ -11,7 +11,7 @@ defmodule Wenche.MaskinportenTest do
     %{private_key_pem: pem}
   end
 
-  describe "build_jwt_grant/2" do
+  describe "build_jwt_grant/3" do
     test "builds a valid JWT with correct claims", %{private_key_pem: pem} do
       config = [
         client_id: "test-client-id",
@@ -39,7 +39,7 @@ defmodule Wenche.MaskinportenTest do
       assert payload["scope"] == "altinn:instances.read"
       assert is_integer(payload["iat"])
       assert is_integer(payload["exp"])
-      assert payload["exp"] == payload["iat"] + 120
+      assert payload["exp"] == payload["iat"] + 119
       assert is_binary(payload["jti"])
     end
 
@@ -57,10 +57,48 @@ defmodule Wenche.MaskinportenTest do
       assert payload["aud"] == "https://maskinporten.no"
     end
 
+    test "adds authorization_details when org_nummer is provided", %{private_key_pem: pem} do
+      config = [
+        client_id: "test-client-id",
+        kid: "test-kid",
+        private_key_pem: pem,
+        env: "test"
+      ]
+
+      assert {:ok, jwt} =
+               Maskinporten.build_jwt_grant(config, "altinn:instances.read",
+                 org_nummer: "912345678"
+               )
+
+      parts = String.split(jwt, ".")
+      payload = parts |> Enum.at(1) |> Base.url_decode64!(padding: false) |> Jason.decode!()
+
+      assert is_list(payload["authorization_details"])
+      [auth_detail] = payload["authorization_details"]
+      assert auth_detail["type"] == "urn:altinn:systemuser"
+      assert auth_detail["systemuser_org"]["ID"] == "0192:912345678"
+    end
+
     test "raises on missing config" do
       assert_raise KeyError, fn ->
         Maskinporten.build_jwt_grant([], "test:scope")
       end
+    end
+  end
+
+  describe "default_scopes/0" do
+    test "returns the default scopes" do
+      scopes = Maskinporten.default_scopes()
+      assert scopes =~ "altinn:instances.read"
+      assert scopes =~ "altinn:instances.write"
+    end
+  end
+
+  describe "admin_scopes/0" do
+    test "returns the admin scopes" do
+      scopes = Maskinporten.admin_scopes()
+      assert scopes =~ "systemregister.write"
+      assert scopes =~ "systemuser.request"
     end
   end
 end

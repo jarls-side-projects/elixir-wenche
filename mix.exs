@@ -30,6 +30,8 @@ defmodule Wenche.MixProject do
       {:req, "~> 0.5"},
       {:xml_builder, "~> 2.3"},
       {:decimal, "~> 2.0"},
+      {:uuid, "~> 1.1"},
+      {:yaml_elixir, "~> 2.11"},
       {:plug, "~> 1.0", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]

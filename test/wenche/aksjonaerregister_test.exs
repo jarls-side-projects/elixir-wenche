@@ -2,44 +2,177 @@ defmodule Wenche.AksjonaerregisterTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Aksjonaerregister
+  alias Wenche.Models.{Aksjonaerregisteroppgave, Aksjonaer, Selskap}
 
-  @company %{org_number: "912345678", name: "Aksje AS"}
+  def sample_selskap do
+    %Selskap{
+      navn: "Aksje AS",
+      org_nummer: "912345678",
+      daglig_leder: "Ola Nordmann",
+      styreleder: "Kari Nordmann",
+      forretningsadresse: "Storgata 1, 0001 Oslo",
+      stiftelsesaar: 2020,
+      aksjekapital: 30_000
+    }
+  end
 
-  describe "generate_xml/3" do
+  describe "generer_xml/1" do
     test "generates valid XML with shareholder data" do
-      shareholders = [
-        %{
-          fodselsnummer: "12345678901",
-          name: "Ola Nordmann",
-          antall_aksjer: 100,
-          aksjeklasse: "A",
-          utbytte_utbetalt: Decimal.new("50000"),
-          innbetalt_kapital_per_aksje: Decimal.new("100")
-        },
-        %{
-          fodselsnummer: "98765432101",
-          name: "Kari Nordmann",
-          antall_aksjer: 50,
-          aksjeklasse: "A",
-          utbytte_utbetalt: Decimal.new("25000"),
-          innbetalt_kapital_per_aksje: Decimal.new("100")
-        }
-      ]
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: [
+          %Aksjonaer{
+            fodselsnummer: "12345678901",
+            navn: "Ola Nordmann",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 50_000,
+            innbetalt_kapital_per_aksje: 100
+          },
+          %Aksjonaer{
+            fodselsnummer: "98765432101",
+            navn: "Kari Nordmann",
+            antall_aksjer: 50,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 25_000,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
 
-      xml = Aksjonaerregister.generate_xml(2025, @company, shareholders)
+      xml = Aksjonaerregister.generer_xml(oppgave)
 
-      assert xml =~ "Aksjonaerregisteroppgave"
+      assert xml =~ "RF-1086"
       assert xml =~ "2025"
       assert xml =~ "912345678"
       assert xml =~ "Aksje AS"
       assert xml =~ "Ola Nordmann"
       assert xml =~ "Kari Nordmann"
-      assert xml =~ "150"
-      assert xml =~ "75000"
+      assert xml =~ "12345678901"
+      assert xml =~ "98765432101"
+      # Total aksjer
+      assert xml =~ "<AntallAksjer>150</AntallAksjer>"
+    end
+
+    test "includes utbytte when present" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: [
+          %Aksjonaer{
+            fodselsnummer: "12345678901",
+            navn: "Ola Nordmann",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 50_000,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      xml = Aksjonaerregister.generer_xml(oppgave)
+
+      assert xml =~ "<Utbytte>"
+      assert xml =~ "<UtbytteBelop>50000</UtbytteBelop>"
+    end
+
+    test "omits utbytte when zero" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: [
+          %Aksjonaer{
+            fodselsnummer: "12345678901",
+            navn: "Ola Nordmann",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 0,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      xml = Aksjonaerregister.generer_xml(oppgave)
+
+      refute xml =~ "<Utbytte>"
     end
   end
 
-  describe "validate_shareholders/1" do
+  describe "valider/1" do
+    test "returns :ok for valid oppgave" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: [
+          %Aksjonaer{
+            fodselsnummer: "12345678901",
+            navn: "Ola Nordmann",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 0,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      assert :ok = Aksjonaerregister.valider(oppgave)
+    end
+
+    test "returns error for empty aksjonaerer list" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: []
+      }
+
+      assert {:error, errors} = Aksjonaerregister.valider(oppgave)
+      assert Enum.any?(errors, &(&1 =~ "Minst én aksjonær"))
+    end
+
+    test "returns error for invalid fodselsnummer" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: [
+          %Aksjonaer{
+            fodselsnummer: "1234",
+            navn: "Ola Nordmann",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 0,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      assert {:error, errors} = Aksjonaerregister.valider(oppgave)
+      assert Enum.any?(errors, &(&1 =~ "Ugyldig fødselsnummer"))
+    end
+
+    test "returns error when total shares is zero" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2025,
+        aksjonaerer: [
+          %Aksjonaer{
+            fodselsnummer: "12345678901",
+            navn: "Ola Nordmann",
+            antall_aksjer: 0,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 0,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      assert {:error, errors} = Aksjonaerregister.valider(oppgave)
+      assert Enum.any?(errors, &(&1 =~ "Totalt antall aksjer må være større enn 0"))
+    end
+  end
+
+  # Legacy API tests
+  describe "validate_shareholders/1 (legacy)" do
     test "returns :ok for valid shareholders" do
       shareholders = [
         %{fodselsnummer: "12345678901", antall_aksjer: 100},

@@ -13,7 +13,31 @@ defmodule Wenche.AltinnClientTest do
     :ok
   end
 
-  describe "create_instance/4" do
+  describe "new/2" do
+    test "creates a client with default prod env" do
+      client = AltinnClient.new("test-token")
+
+      assert client.token == "test-token"
+      assert client.env == "prod"
+      assert client.apps_base =~ "altinn.no"
+    end
+
+    test "creates a client with test env" do
+      client = AltinnClient.new("test-token", env: "test")
+
+      assert client.env == "test"
+      assert client.apps_base =~ "tt02.altinn.no"
+    end
+
+    test "raises on invalid env" do
+      assert_raise ArgumentError, fn ->
+        AltinnClient.new("test-token", env: "invalid")
+      end
+    end
+  end
+
+  # Legacy API tests
+  describe "create_instance/4 (legacy)" do
     test "creates an instance on success" do
       Req.Test.stub(Wenche.AltinnClient, fn conn ->
         assert conn.method == "POST"
@@ -45,7 +69,7 @@ defmodule Wenche.AltinnClientTest do
     end
   end
 
-  describe "update_data_element/7" do
+  describe "update_data_element/7 (legacy)" do
     test "uploads data successfully" do
       Req.Test.stub(Wenche.AltinnClient, fn conn ->
         assert conn.method == "POST"
@@ -71,7 +95,7 @@ defmodule Wenche.AltinnClientTest do
     end
   end
 
-  describe "complete_instance/4" do
+  describe "complete_instance/4 (legacy)" do
     test "completes an instance" do
       Req.Test.stub(Wenche.AltinnClient, fn conn ->
         assert conn.method == "PUT"
@@ -108,7 +132,7 @@ defmodule Wenche.AltinnClientTest do
     end
   end
 
-  describe "get_status/4" do
+  describe "get_status/4 (legacy)" do
     test "returns instance status" do
       Req.Test.stub(Wenche.AltinnClient, fn conn ->
         assert conn.method == "GET"

@@ -11,11 +11,14 @@ Ported from the Python CLI tool [Wenche](https://github.com/olefredrik/Wenche).
 | Module | Description | Origin |
 |---|---|---|
 | `Wenche.Maskinporten` | JWT-based auth against Maskinporten + Altinn token exchange | `wenche/auth.py` |
+| `Wenche.Systembruker` | System user registration and management for Altinn 3 | `wenche/systembruker.py` |
 | `Wenche.AltinnClient` | Altinn 3 API client (instances, data upload, completion) | `wenche/altinn_client.py` |
+| `Wenche.Aarsregnskap` | Annual accounts submission flow (config, validation, submission) | `wenche/aarsregnskap.py` |
 | `Wenche.BrgXml` | BRG annual statement XML (hovedskjema/underskjema) | `wenche/brg_xml.py` |
 | `Wenche.Ixbrl` | Inline XBRL (iXBRL) HTML document generation | `wenche/xbrl.py` |
 | `Wenche.Skattemelding` | Tax calculation with fritaksmetoden (RF-1028/RF-1167) | `wenche/skattemelding.py` |
 | `Wenche.Aksjonaerregister` | RF-1086 shareholder register XML generation | `wenche/aksjonaerregister.py` |
+| `Wenche.Models` | Data structures (Selskap, Aarsregnskap, Resultatregnskap, Balanse, etc.) | `wenche/models.py` |
 
 ## Installation
 
@@ -41,72 +44,162 @@ config = [
   env: "prod"
 ]
 
-{:ok, token} = Wenche.Maskinporten.get_altinn_token(config, "altinn:instances.read altinn:instances.write")
+# Standard token for instance operations
+{:ok, token} = Wenche.Maskinporten.get_altinn_token(config)
+
+# System user token for organization-specific operations
+{:ok, token} = Wenche.Maskinporten.get_systemuser_token(config, "912345678")
+
+# Admin token for system register operations
+{:ok, admin_token} = Wenche.Maskinporten.get_admin_token(config)
 ```
 
 ### Submitting Annual Statement
 
 ```elixir
-# Build financial data (from your accounting system)
-financial_data = %{
-  year: 2025,
-  resultatregnskap: %{
-    driftsinntekter: Decimal.new("500000"),
-    driftskostnader: Decimal.new("350000"),
-    driftsresultat: Decimal.new("150000"),
-    finansinntekter: Decimal.new("10000"),
-    finanskostnader: Decimal.new("5000"),
-    resultat_foer_skatt: Decimal.new("155000"),
-    skattekostnad: Decimal.new("34100"),
-    aarsresultat: Decimal.new("120900")
+alias Wenche.Models.{
+  Aarsregnskap, Selskap, Resultatregnskap, Balanse,
+  Driftsinntekter, Driftskostnader, Finansposter,
+  Eiendeler, Anleggsmidler, Omloepmidler,
+  EgenkapitalOgGjeld, Egenkapital, LangsiktigGjeld, KortsiktigGjeld
+}
+
+# Build company data
+selskap = %Selskap{
+  navn: "Mitt Selskap AS",
+  org_nummer: "912345678",
+  daglig_leder: "Ola Nordmann",
+  styreleder: "Kari Nordmann",
+  forretningsadresse: "Storgata 1, 0001 Oslo",
+  stiftelsesaar: 2020,
+  aksjekapital: 30000
+}
+
+# Build financial data
+resultatregnskap = %Resultatregnskap{
+  driftsinntekter: %Driftsinntekter{
+    salgsinntekter: 0,
+    andre_driftsinntekter: 0
   },
-  balanse: %{
-    anleggsmidler: Decimal.new("200000"),
-    omloepsmidler: Decimal.new("300000"),
-    sum_eiendeler: Decimal.new("500000"),
-    innskutt_egenkapital: Decimal.new("100000"),
-    opptjent_egenkapital: Decimal.new("150000"),
-    sum_egenkapital: Decimal.new("250000"),
-    langsiktig_gjeld: Decimal.new("100000"),
-    kortsiktig_gjeld: Decimal.new("150000"),
-    sum_gjeld: Decimal.new("250000")
+  driftskostnader: %Driftskostnader{
+    loennskostnader: 0,
+    avskrivninger: 0,
+    andre_driftskostnader: 5000
+  },
+  finansposter: %Finansposter{
+    utbytte_fra_datterselskap: 100000,
+    andre_finansinntekter: 500,
+    rentekostnader: 0,
+    andre_finanskostnader: 0
   }
 }
 
-company = %{org_number: "912345678", name: "Mitt Selskap AS"}
+balanse = %Balanse{
+  eiendeler: %Eiendeler{
+    anleggsmidler: %Anleggsmidler{
+      aksjer_i_datterselskap: 500000,
+      andre_aksjer: 0,
+      langsiktige_fordringer: 0
+    },
+    omloepmidler: %Omloepmidler{
+      kortsiktige_fordringer: 0,
+      bankinnskudd: 125500
+    }
+  },
+  egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+    egenkapital: %Egenkapital{
+      aksjekapital: 30000,
+      overkursfond: 0,
+      annen_egenkapital: 595500
+    },
+    langsiktig_gjeld: %LangsiktigGjeld{
+      laan_fra_aksjonaer: 0,
+      andre_langsiktige_laan: 0
+    },
+    kortsiktig_gjeld: %KortsiktigGjeld{
+      leverandoergjeld: 0,
+      skyldige_offentlige_avgifter: 0,
+      annen_kortsiktig_gjeld: 0
+    }
+  }
+}
 
-{:ok, hovedskjema} = Wenche.BrgXml.generate_hovedskjema(financial_data, company)
-{:ok, underskjema} = Wenche.BrgXml.generate_underskjema(financial_data, company)
-{:ok, ixbrl_html} = Wenche.Ixbrl.generate(financial_data, company)
+regnskap = %Aarsregnskap{
+  selskap: selskap,
+  regnskapsaar: 2025,
+  resultatregnskap: resultatregnskap,
+  balanse: balanse
+}
+
+# Generate XML documents
+hovedskjema = Wenche.BrgXml.generer_hovedskjema(regnskap)
+underskjema = Wenche.BrgXml.generer_underskjema(regnskap)
+ixbrl_html = Wenche.Ixbrl.generer_ixbrl(regnskap)
+
+# Or submit directly via Altinn
+client = Wenche.AltinnClient.new(altinn_token, env: "prod")
+{:ok, inbox_url} = Wenche.Aarsregnskap.send_inn(regnskap, client)
 ```
 
 ### Tax Calculation
 
 ```elixir
-calc = Wenche.Skattemelding.calculate_tax(financial_data, 22,
-  apply_exemption_method: true,
-  subsidiary_dividends: Decimal.new("100000")
-)
+alias Wenche.Models.SkattemeldingKonfig
 
-report = Wenche.Skattemelding.format_report(2025, company, calc)
+konfig = %SkattemeldingKonfig{
+  anvend_fritaksmetoden: true,
+  eierandel_datterselskap: 100,
+  underskudd_til_fremfoering: 0
+}
+
+rapport = Wenche.Skattemelding.generer(regnskap, konfig)
+IO.puts(rapport)
 ```
 
 ### Shareholder Register (RF-1086)
 
 ```elixir
-shareholders = [
-  %{
+alias Wenche.Models.{Aksjonaerregisteroppgave, Aksjonaer}
+
+aksjonaerer = [
+  %Aksjonaer{
+    navn: "Ola Nordmann",
     fodselsnummer: "12345678901",
-    name: "Ola Nordmann",
     antall_aksjer: 100,
     aksjeklasse: "A",
-    utbytte_utbetalt: Decimal.new("50000"),
-    innbetalt_kapital_per_aksje: Decimal.new("100")
+    utbytte_utbetalt: 50000,
+    innbetalt_kapital_per_aksje: 300
   }
 ]
 
-:ok = Wenche.Aksjonaerregister.validate_shareholders(shareholders)
-xml = Wenche.Aksjonaerregister.generate_xml(2025, company, shareholders)
+oppgave = %Aksjonaerregisteroppgave{
+  selskap: selskap,
+  regnskapsaar: 2025,
+  aksjonaerer: aksjonaerer
+}
+
+:ok = Wenche.Aksjonaerregister.valider(oppgave)
+xml = Wenche.Aksjonaerregister.generer_xml(oppgave)
+```
+
+### System User Setup (One-time)
+
+```elixir
+# Get admin token
+{:ok, admin_token} = Wenche.Maskinporten.get_admin_token(config)
+
+# Register system (once per vendor)
+{:ok, _} = Wenche.Systembruker.registrer_system(admin_token, vendor_orgnr, client_id)
+
+# Create system user request for an organization
+{:ok, request} = Wenche.Systembruker.opprett_forespoersel(admin_token, vendor_orgnr, org_nummer)
+# User must approve at request["confirmUrl"]
+
+# Check approval status
+{:ok, status} = Wenche.Systembruker.hent_forespoersel_status(admin_token, request["id"])
+
+# List all approved system users
+{:ok, users} = Wenche.Systembruker.hent_systembrukere(admin_token, vendor_orgnr)
 ```
 
 ## License
