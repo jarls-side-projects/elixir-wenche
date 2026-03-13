@@ -17,7 +17,7 @@ defmodule Wenche.Maskinporten do
   - `:client_id` — Maskinporten client ID from Digdir
   - `:kid` — Key ID (UUID) from Digdir
   - `:private_key_pem` — PEM-encoded RSA private key (binary)
-  - `:env` — `"test"` or `"prod"` (default: `"test"`)
+  - `:env` — `"test"` or `"prod"` (default: `"prod"`)
   - `:req_options` — optional extra options passed to `Req` (default: `[]`)
   """
 
@@ -31,6 +31,14 @@ defmodule Wenche.Maskinporten do
     "prod" => "https://platform.altinn.no"
   }
 
+  # Scopes for instance submission
+  @scopes "altinn:instances.read altinn:instances.write"
+
+  # Scopes for system register and system user administration
+  @admin_scopes "altinn:authentication/systemregister.write " <>
+                  "altinn:authentication/systemuser.request.read " <>
+                  "altinn:authentication/systemuser.request.write"
+
   @doc """
   Obtains an Altinn platform token by:
   1. Building a JWT grant assertion
@@ -39,7 +47,7 @@ defmodule Wenche.Maskinporten do
 
   Returns `{:ok, altinn_token}` or `{:error, reason}`.
   """
-  def get_altinn_token(config, scope) do
+  def get_altinn_token(config, scope \\ @scopes) do
     with {:ok, jwt} <- build_jwt_grant(config, scope),
          {:ok, maskinporten_token} <- exchange_jwt(config, jwt),
          {:ok, altinn_token} <- exchange_for_altinn_token(config, maskinporten_token) do
@@ -48,27 +56,78 @@ defmodule Wenche.Maskinporten do
   end
 
   @doc """
+  Obtains an Altinn token with system user authorization details.
+
+  Use this for organization-specific operations using the system user flow.
+
+  Returns `{:ok, altinn_token}` or `{:error, reason}`.
+  """
+  def get_systemuser_token(config, org_nummer) do
+    with {:ok, jwt} <- build_jwt_grant(config, @scopes, org_nummer: org_nummer),
+         {:ok, maskinporten_token} <- exchange_jwt(config, jwt),
+         {:ok, altinn_token} <- exchange_for_altinn_token(config, maskinporten_token) do
+      {:ok, altinn_token}
+    end
+  end
+
+  @doc """
+  Obtains a raw Maskinporten token with admin scopes for system register
+  and system user administration.
+
+  Does NOT exchange for an Altinn token.
+
+  Returns `{:ok, maskinporten_token}` or `{:error, reason}`.
+  """
+  def get_admin_token(config) do
+    with {:ok, jwt} <- build_jwt_grant(config, @admin_scopes),
+         {:ok, maskinporten_token} <- exchange_jwt(config, jwt) do
+      {:ok, maskinporten_token}
+    end
+  end
+
+  @doc """
   Builds a JWT grant assertion (RFC 7523) signed with RS256.
+
+  ## Options
+
+  - `:org_nummer` — if provided, adds authorization_details for system user token
 
   Returns `{:ok, jwt_string}` or `{:error, reason}`.
   """
-  def build_jwt_grant(config, scope) do
-    env = Keyword.get(config, :env, "test")
+  def build_jwt_grant(config, scope, opts \\ []) do
+    env = Keyword.get(config, :env, "prod")
     client_id = Keyword.fetch!(config, :client_id)
     kid = Keyword.fetch!(config, :kid)
     private_key_pem = Keyword.fetch!(config, :private_key_pem)
     audience = Map.fetch!(@maskinporten_urls, env)
+    org_nummer = Keyword.get(opts, :org_nummer)
 
     now = System.os_time(:second)
 
     claims = %{
       "aud" => audience,
       "iss" => client_id,
+      "sub" => client_id,
       "scope" => scope,
       "iat" => now,
-      "exp" => now + 120,
+      "exp" => now + 119,
       "jti" => generate_jti()
     }
+
+    claims =
+      if org_nummer do
+        Map.put(claims, "authorization_details", [
+          %{
+            "type" => "urn:altinn:systemuser",
+            "systemuser_org" => %{
+              "authority" => "iso6523-actorid-upis",
+              "ID" => "0192:#{org_nummer}"
+            }
+          }
+        ])
+      else
+        claims
+      end
 
     signer = Joken.Signer.create("RS256", %{"pem" => private_key_pem}, %{"kid" => kid})
 
@@ -79,7 +138,7 @@ defmodule Wenche.Maskinporten do
   end
 
   defp exchange_jwt(config, jwt) do
-    env = Keyword.get(config, :env, "test")
+    env = Keyword.get(config, :env, "prod")
     req_options = Keyword.get(config, :req_options, [])
     token_url = "#{Map.fetch!(@maskinporten_urls, env)}/token"
 
@@ -108,7 +167,7 @@ defmodule Wenche.Maskinporten do
   end
 
   defp exchange_for_altinn_token(config, maskinporten_token) do
-    env = Keyword.get(config, :env, "test")
+    env = Keyword.get(config, :env, "prod")
     req_options = Keyword.get(config, :req_options, [])
     exchange_url = "#{Map.fetch!(@altinn_urls, env)}/authentication/api/v1/exchange/maskinporten"
 
@@ -117,7 +176,7 @@ defmodule Wenche.Maskinporten do
            [{:headers, [{"authorization", "Bearer #{maskinporten_token}"}]} | req_options]
          ) do
       {:ok, %Req.Response{status: 200, body: token}} when is_binary(token) ->
-        {:ok, token}
+        {:ok, String.trim(token, "\"")}
 
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:altinn_exchange_error, status, body}}
@@ -130,4 +189,14 @@ defmodule Wenche.Maskinporten do
   defp generate_jti do
     :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
   end
+
+  @doc """
+  Returns the default scopes for instance operations.
+  """
+  def default_scopes, do: @scopes
+
+  @doc """
+  Returns the admin scopes for system register operations.
+  """
+  def admin_scopes, do: @admin_scopes
 end

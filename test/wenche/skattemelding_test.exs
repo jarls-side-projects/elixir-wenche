@@ -2,116 +2,147 @@ defmodule Wenche.SkattemeldingTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Skattemelding
-
-  @financial_data %{
-    year: 2025,
-    resultatregnskap: %{
-      driftsinntekter: Decimal.new("500000"),
-      driftskostnader: Decimal.new("350000"),
-      driftsresultat: Decimal.new("150000"),
-      finansinntekter: Decimal.new("10000"),
-      finanskostnader: Decimal.new("5000"),
-      netto_finans: Decimal.new("5000"),
-      ekstraordinaere: Decimal.new("0"),
-      skattekostnad: Decimal.new("0"),
-      resultat_foer_skatt: Decimal.new("155000"),
-      aarsresultat: Decimal.new("155000")
-    },
-    balanse: %{
-      sum_eiendeler: Decimal.new("500000"),
-      sum_egenkapital: Decimal.new("250000"),
-      sum_gjeld: Decimal.new("250000")
-    }
+  alias Wenche.Models.{
+    Aarsregnskap,
+    Selskap,
+    Resultatregnskap,
+    Balanse,
+    Driftsinntekter,
+    Driftskostnader,
+    Finansposter,
+    Eiendeler,
+    Anleggsmidler,
+    Omloepmidler,
+    EgenkapitalOgGjeld,
+    Egenkapital,
+    LangsiktigGjeld,
+    KortsiktigGjeld,
+    SkattemeldingKonfig
   }
 
-  describe "calculate_tax/3" do
-    test "calculates 22% tax on positive income" do
-      calc = Skattemelding.calculate_tax(@financial_data, 22, [])
+  def sample_selskap do
+    %Selskap{
+      navn: "Test AS",
+      org_nummer: "912345678",
+      daglig_leder: "Ola Nordmann",
+      styreleder: "Kari Nordmann",
+      forretningsadresse: "Storgata 1, 0001 Oslo",
+      stiftelsesaar: 2020,
+      aksjekapital: 30_000
+    }
+  end
 
-      assert Decimal.equal?(calc.taxable_income, Decimal.new("155000"))
-      assert Decimal.equal?(calc.tax, Decimal.new("34100"))
-      assert calc.tax_rate == 22
+  def sample_regnskap do
+    %Aarsregnskap{
+      selskap: sample_selskap(),
+      regnskapsaar: 2025,
+      resultatregnskap: %Resultatregnskap{
+        driftsinntekter: %Driftsinntekter{salgsinntekter: 500_000},
+        driftskostnader: %Driftskostnader{andre_driftskostnader: 350_000},
+        finansposter: %Finansposter{
+          andre_finansinntekter: 10_000,
+          rentekostnader: 5_000
+        }
+      },
+      balanse: %Balanse{
+        eiendeler: %Eiendeler{
+          anleggsmidler: %Anleggsmidler{aksjer_i_datterselskap: 200_000},
+          omloepmidler: %Omloepmidler{bankinnskudd: 300_000}
+        },
+        egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+          egenkapital: %Egenkapital{aksjekapital: 100_000, annen_egenkapital: 150_000},
+          langsiktig_gjeld: %LangsiktigGjeld{laan_fra_aksjonaer: 100_000},
+          kortsiktig_gjeld: %KortsiktigGjeld{leverandoergjeld: 150_000}
+        }
+      }
+    }
+  end
+
+  describe "generer/2" do
+    test "generates a report with company info" do
+      konfig = %SkattemeldingKonfig{}
+      report = Skattemelding.generer(sample_regnskap(), konfig)
+
+      assert report =~ "Test AS"
+      assert report =~ "912345678"
+      assert report =~ "2025"
     end
 
-    test "applies loss carryforward" do
-      calc =
-        Skattemelding.calculate_tax(@financial_data, 22,
-          loss_carryforward: Decimal.new("55000")
-        )
+    test "includes RF-1167 section" do
+      konfig = %SkattemeldingKonfig{}
+      report = Skattemelding.generer(sample_regnskap(), konfig)
 
-      assert Decimal.equal?(calc.taxable_income, Decimal.new("100000"))
-      assert Decimal.equal?(calc.tax, Decimal.new("22000"))
+      assert report =~ "RF-1167"
+      assert report =~ "NÆRINGSOPPGAVE"
+      assert report =~ "DRIFTSINNTEKTER"
+      assert report =~ "DRIFTSKOSTNADER"
     end
 
-    test "loss carryforward does not make taxable income negative" do
-      calc =
-        Skattemelding.calculate_tax(@financial_data, 22,
-          loss_carryforward: Decimal.new("200000")
-        )
+    test "includes RF-1028 section" do
+      konfig = %SkattemeldingKonfig{}
+      report = Skattemelding.generer(sample_regnskap(), konfig)
 
-      assert Decimal.equal?(calc.taxable_income, Decimal.new("0"))
-      assert Decimal.equal?(calc.tax, Decimal.new("0"))
+      assert report =~ "RF-1028"
+      assert report =~ "SKATTEMELDING FOR AS"
+      assert report =~ "22 %"
     end
 
-    test "applies fritaksmetoden on subsidiary dividends" do
-      calc =
-        Skattemelding.calculate_tax(@financial_data, 22,
-          apply_exemption_method: true,
-          subsidiary_dividends: Decimal.new("100000")
-        )
+    test "includes balance section" do
+      konfig = %SkattemeldingKonfig{}
+      report = Skattemelding.generer(sample_regnskap(), konfig)
 
-      assert Decimal.equal?(calc.exemption_amount, Decimal.new("97000"))
-      assert Decimal.equal?(calc.taxable_dividend_addition, Decimal.new("3000"))
-      assert Decimal.equal?(calc.taxable_before_loss, Decimal.new("255000"))
-      assert Decimal.equal?(calc.tax, Decimal.new("56100"))
+      assert report =~ "BALANSE"
+      assert report =~ "EIENDELER"
+      assert report =~ "EGENKAPITAL OG GJELD"
     end
 
-    test "no tax on negative income" do
-      negative_data = %{
-        @financial_data
-        | resultatregnskap: %{
-            @financial_data.resultatregnskap
-            | resultat_foer_skatt: Decimal.new("-50000")
+    test "applies fritaksmetoden for subsidiary dividends" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 0},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 5_000},
+            finansposter: %Finansposter{utbytte_fra_datterselskap: 100_000}
           }
       }
 
-      calc = Skattemelding.calculate_tax(negative_data, 22, [])
+      konfig = %SkattemeldingKonfig{anvend_fritaksmetoden: true, eierandel_datterselskap: 100}
+      report = Skattemelding.generer(regnskap, konfig)
 
-      assert Decimal.equal?(calc.tax, Decimal.new("0"))
+      assert report =~ "fritatt"
     end
 
-    test "uses custom tax rate" do
-      calc = Skattemelding.calculate_tax(@financial_data, 25, [])
+    test "applies 3% rule for <90% ownership" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 0},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 5_000},
+            finansposter: %Finansposter{utbytte_fra_datterselskap: 100_000}
+          }
+      }
 
-      assert Decimal.equal?(calc.tax, Decimal.new("38750"))
-    end
-  end
+      konfig = %SkattemeldingKonfig{anvend_fritaksmetoden: true, eierandel_datterselskap: 50}
+      report = Skattemelding.generer(regnskap, konfig)
 
-  describe "format_report/3" do
-    test "generates a readable report" do
-      calc = Skattemelding.calculate_tax(@financial_data, 22, [])
-      company = %{name: "Test AS", org_number: "912345678"}
-
-      report = Skattemelding.format_report(2025, company, calc)
-
-      assert report =~ "SKATTEMELDING 2025"
-      assert report =~ "Test AS"
-      assert report =~ "912345678"
-      assert report =~ "22%"
-    end
-  end
-
-  describe "format_nok/1" do
-    test "formats positive numbers with thousand separators" do
-      assert Skattemelding.format_nok(Decimal.new("1234567")) == "1 234 567 NOK"
+      assert report =~ "97 %"
+      assert report =~ "3 %"
     end
 
-    test "formats negative numbers" do
-      assert Skattemelding.format_nok(Decimal.new("-50000")) == "-50 000 NOK"
-    end
+    test "applies loss carryforward" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 100_000},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 0},
+            finansposter: %Finansposter{}
+          }
+      }
 
-    test "formats zero" do
-      assert Skattemelding.format_nok(Decimal.new("0")) == "0 NOK"
+      konfig = %SkattemeldingKonfig{underskudd_til_fremfoering: 50_000}
+      report = Skattemelding.generer(regnskap, konfig)
+
+      assert report =~ "fremf. underskudd"
     end
   end
 end
