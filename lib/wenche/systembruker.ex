@@ -50,6 +50,20 @@ defmodule Wenche.Systembruker do
   ]
 
   @doc """
+  Returns the list of resource IDs that the system requests access to.
+
+  Each entry is a short resource value string, e.g. `"app_brg_aarsregnskap-vanlig-202406"`.
+  """
+  def resource_ids do
+    Enum.map(@rights, fn %{"resource" => [%{"value" => value}]} -> value end)
+  end
+
+  @doc """
+  Returns the raw rights structure used in Altinn API payloads.
+  """
+  def rights, do: @rights
+
+  @doc """
   Returns the system ID in the format `<vendor_orgnr>_<name>`.
   """
   def system_id(vendor_orgnr, name) when is_binary(name) and name != "" do
