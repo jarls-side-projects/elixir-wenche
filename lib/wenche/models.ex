@@ -19,7 +19,8 @@ defmodule Wenche.Models do
       :styreleder,
       :forretningsadresse,
       :stiftelsesaar,
-      :aksjekapital
+      :aksjekapital,
+      kontakt_epost: ""
     ]
 
     @type t :: %__MODULE__{
@@ -29,7 +30,8 @@ defmodule Wenche.Models do
             styreleder: String.t(),
             forretningsadresse: String.t(),
             stiftelsesaar: integer(),
-            aksjekapital: integer()
+            aksjekapital: integer(),
+            kontakt_epost: String.t()
           }
   end
 

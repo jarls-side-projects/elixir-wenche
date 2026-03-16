@@ -22,7 +22,8 @@ defmodule Wenche do
   - `Wenche.Skattemelding` — Tax calculation with fritaksmetoden (RF-1028/RF-1167)
 
   ### Shareholder Register (Aksjonærregister)
-  - `Wenche.Aksjonaerregister` — RF-1086 shareholder register XML generation
+  - `Wenche.Aksjonaerregister` — RF-1086 shareholder register XML generation (Hovedskjema + Underskjema)
+  - `Wenche.SkdClient` — SKD REST API client for aksjonærregisteroppgave submission
 
   ### Data Models
   - `Wenche.Models` — All data structures (Selskap, Aarsregnskap, Resultatregnskap, Balanse, etc.)

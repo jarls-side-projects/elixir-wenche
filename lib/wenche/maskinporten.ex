@@ -39,6 +39,9 @@ defmodule Wenche.Maskinporten do
                   "altinn:authentication/systemuser.request.read " <>
                   "altinn:authentication/systemuser.request.write"
 
+  # Scope for aksjonærregisteroppgave submission directly to SKD's API
+  @skd_aksjonaer_scope "skatteetaten:innrapporteringaksjonaerregisteroppgave"
+
   @doc """
   Obtains an Altinn platform token by:
   1. Building a JWT grant assertion
@@ -191,6 +194,22 @@ defmodule Wenche.Maskinporten do
   end
 
   @doc """
+  Obtains a Maskinporten token with SKD aksjonærregister scope and system user.
+
+  SKD's API uses the Maskinporten token directly (no Altinn exchange).
+  Requires that scope `skatteetaten:innrapporteringaksjonaerregisteroppgave`
+  has been granted by Skatteetaten for the client.
+
+  Returns `{:ok, maskinporten_token}` or `{:error, reason}`.
+  """
+  def get_skd_aksjonaer_token(config, org_nummer) do
+    with {:ok, jwt} <- build_jwt_grant(config, @skd_aksjonaer_scope, org_nummer: org_nummer),
+         {:ok, maskinporten_token} <- exchange_jwt(config, jwt) do
+      {:ok, maskinporten_token}
+    end
+  end
+
+  @doc """
   Returns the default scopes for instance operations.
   """
   def default_scopes, do: @scopes
@@ -199,4 +218,9 @@ defmodule Wenche.Maskinporten do
   Returns the admin scopes for system register operations.
   """
   def admin_scopes, do: @admin_scopes
+
+  @doc """
+  Returns the SKD aksjonærregister scope.
+  """
+  def skd_aksjonaer_scope, do: @skd_aksjonaer_scope
 end

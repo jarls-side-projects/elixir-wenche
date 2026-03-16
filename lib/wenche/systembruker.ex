@@ -41,7 +41,10 @@ defmodule Wenche.Systembruker do
     },
     %{
       "resource" => [
-        %{"id" => "urn:altinn:resource", "value" => "ske-innrapportering-aksjonaerregisteroppgave"}
+        %{
+          "id" => "urn:altinn:resource",
+          "value" => "ske-innrapportering-aksjonaerregisteroppgave"
+        }
       ]
     }
   ]

@@ -39,6 +39,11 @@ defmodule Wenche.BrgXml do
     signatar = regnskap.signatar || s.daglig_leder
     ikke_revideres = if regnskap.revideres, do: "nei", else: "ja"
 
+    morselskap =
+      if regnskap.balanse.eiendeler.anleggsmidler.aksjer_i_datterselskap > 0,
+        do: "ja",
+        else: "nei"
+
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <melding xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -66,7 +71,7 @@ defmodule Wenche.BrgXml do
           <regnskapsslutt orid="17104">#{aar}-12-31</regnskapsslutt>
         </regnskapsperiode>
         <konsern>
-          <morselskap orid="4168">nei</morselskap>
+          <morselskap orid="4168">#{morselskap}</morselskap>
           <konsernregnskap orid="25943">nei</konsernregnskap>
         </konsern>
         <regnskapsprinsipper>

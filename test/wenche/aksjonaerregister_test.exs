@@ -12,117 +12,159 @@ defmodule Wenche.AksjonaerregisterTest do
       styreleder: "Kari Nordmann",
       forretningsadresse: "Storgata 1, 0001 Oslo",
       stiftelsesaar: 2020,
-      aksjekapital: 30_000
+      aksjekapital: 30_000,
+      kontakt_epost: "post@aksje.no"
     }
   end
 
-  describe "generer_xml/1" do
-    test "generates valid XML with shareholder data" do
-      oppgave = %Aksjonaerregisteroppgave{
-        selskap: sample_selskap(),
-        regnskapsaar: 2025,
-        aksjonaerer: [
-          %Aksjonaer{
-            fodselsnummer: "12345678901",
-            navn: "Ola Nordmann",
-            antall_aksjer: 100,
-            aksjeklasse: "A",
-            utbytte_utbetalt: 50_000,
-            innbetalt_kapital_per_aksje: 100
-          },
-          %Aksjonaer{
-            fodselsnummer: "98765432101",
-            navn: "Kari Nordmann",
-            antall_aksjer: 50,
-            aksjeklasse: "A",
-            utbytte_utbetalt: 25_000,
-            innbetalt_kapital_per_aksje: 100
-          }
-        ]
-      }
+  def sample_aksjonaer do
+    %Aksjonaer{
+      fodselsnummer: "12345678901",
+      navn: "Ola Nordmann",
+      antall_aksjer: 100,
+      aksjeklasse: "A",
+      utbytte_utbetalt: 0,
+      innbetalt_kapital_per_aksje: 300
+    }
+  end
 
-      xml = Aksjonaerregister.generer_xml(oppgave)
+  def sample_oppgave do
+    %Aksjonaerregisteroppgave{
+      selskap: sample_selskap(),
+      regnskapsaar: 2024,
+      aksjonaerer: [sample_aksjonaer()]
+    }
+  end
 
-      assert xml =~ "RF-1086"
-      assert xml =~ "2025"
-      assert xml =~ "912345678"
-      assert xml =~ "Aksje AS"
-      assert xml =~ "Ola Nordmann"
-      assert xml =~ "Kari Nordmann"
-      assert xml =~ "12345678901"
-      assert xml =~ "98765432101"
-      # Total aksjer
-      assert xml =~ "<AntallAksjer>150</AntallAksjer>"
+  # ---------------------------------------------------------------------------
+  # Hovedskjema — XML structure
+  # ---------------------------------------------------------------------------
+
+  describe "generer_hovedskjema_xml/1" do
+    test "generates valid XML" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+      assert xml =~ "<?xml version="
+      assert xml =~ "<Skjema"
+      assert xml =~ "</Skjema>"
     end
 
-    test "includes utbytte when present" do
-      oppgave = %Aksjonaerregisteroppgave{
-        selskap: sample_selskap(),
-        regnskapsaar: 2025,
-        aksjonaerer: [
-          %Aksjonaer{
-            fodselsnummer: "12345678901",
-            navn: "Ola Nordmann",
-            antall_aksjer: 100,
-            aksjeklasse: "A",
-            utbytte_utbetalt: 50_000,
-            innbetalt_kapital_per_aksje: 100
-          }
-        ]
-      }
-
-      xml = Aksjonaerregister.generer_xml(oppgave)
-
-      assert xml =~ "<Utbytte>"
-      assert xml =~ "<UtbytteBelop>50000</UtbytteBelop>"
+    test "has correct skjemanummer and blankettnummer" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+      assert xml =~ ~s(skjemanummer="890")
+      assert xml =~ ~s(blankettnummer="RF-1086")
     end
 
-    test "omits utbytte when zero" do
-      oppgave = %Aksjonaerregisteroppgave{
-        selskap: sample_selskap(),
-        regnskapsaar: 2025,
-        aksjonaerer: [
-          %Aksjonaer{
-            fodselsnummer: "12345678901",
-            navn: "Ola Nordmann",
-            antall_aksjer: 100,
-            aksjeklasse: "A",
-            utbytte_utbetalt: 0,
-            innbetalt_kapital_per_aksje: 100
-          }
-        ]
-      }
+    test "includes org number" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
 
-      xml = Aksjonaerregister.generer_xml(oppgave)
+      assert xml =~
+               "<EnhetOrganisasjonsnummer-datadef-18 orid=\"18\">912345678</EnhetOrganisasjonsnummer-datadef-18>"
+    end
 
-      refute xml =~ "<Utbytte>"
+    test "includes income year" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+      assert xml =~ "<Inntektsar-datadef-692 orid=\"692\">2024</Inntektsar-datadef-692>"
+    end
+
+    test "includes aksjekapital" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+      assert xml =~ "<Aksjekapital-datadef-87 orid=\"87\">30000</Aksjekapital-datadef-87>"
+    end
+
+    test "includes total number of shares" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+
+      assert xml =~
+               "<AksjerMvAntall-datadef-29167 orid=\"29167\">100</AksjerMvAntall-datadef-29167>"
+    end
+
+    test "calculates pålydende per aksje" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+      # 30000 / 100 = 300
+      assert xml =~
+               "<AksjeMvPalydende-datadef-23945 orid=\"23945\">300</AksjeMvPalydende-datadef-23945>"
+    end
+
+    test "includes kontakt epost" do
+      xml = Aksjonaerregister.generer_hovedskjema_xml(sample_oppgave())
+
+      assert xml =~
+               "<KontaktpersonSkjemaEPost-datadef-30533 orid=\"30533\">post@aksje.no</KontaktpersonSkjemaEPost-datadef-30533>"
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # Underskjema — XML structure
+  # ---------------------------------------------------------------------------
+
+  describe "generer_underskjema_xml/2" do
+    test "generates valid XML" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+      assert xml =~ "<?xml version="
+      assert xml =~ "<Skjema"
+      assert xml =~ "</Skjema>"
+    end
+
+    test "has correct skjemanummer and blankettnummer" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+      assert xml =~ ~s(skjemanummer="923")
+      assert xml =~ ~s(blankettnummer="RF-1086-U")
+    end
+
+    test "includes fødselsnummer" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+
+      assert xml =~
+               "<AksjonarFodselsnummer-datadef-1156 orid=\"1156\">12345678901</AksjonarFodselsnummer-datadef-1156>"
+    end
+
+    test "includes number of shares" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+
+      assert xml =~
+               "<AksjonarAksjerAntall-datadef-17741 orid=\"17741\">100</AksjonarAksjerAntall-datadef-17741>"
+    end
+
+    test "calculates anskaffelsesverdi" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+      # 300 * 100 = 30000
+      assert xml =~
+               "<AksjeAnskaffelsesverdi-datadef-17636 orid=\"17636\">30000</AksjeAnskaffelsesverdi-datadef-17636>"
+    end
+
+    test "includes org number" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+
+      assert xml =~
+               "<EnhetOrganisasjonsnummer-datadef-18 orid=\"18\">912345678</EnhetOrganisasjonsnummer-datadef-18>"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Validation
+  # ---------------------------------------------------------------------------
+
   describe "valider/1" do
     test "returns :ok for valid oppgave" do
-      oppgave = %Aksjonaerregisteroppgave{
-        selskap: sample_selskap(),
-        regnskapsaar: 2025,
-        aksjonaerer: [
-          %Aksjonaer{
-            fodselsnummer: "12345678901",
-            navn: "Ola Nordmann",
-            antall_aksjer: 100,
-            aksjeklasse: "A",
-            utbytte_utbetalt: 0,
-            innbetalt_kapital_per_aksje: 100
-          }
-        ]
-      }
-
-      assert :ok = Aksjonaerregister.valider(oppgave)
+      assert :ok = Aksjonaerregister.valider(sample_oppgave())
     end
 
     test "returns error for empty aksjonaerer list" do
       oppgave = %Aksjonaerregisteroppgave{
         selskap: sample_selskap(),
-        regnskapsaar: 2025,
+        regnskapsaar: 2024,
         aksjonaerer: []
       }
 
@@ -130,10 +172,23 @@ defmodule Wenche.AksjonaerregisterTest do
       assert Enum.any?(errors, &(&1 =~ "Minst én aksjonær"))
     end
 
+    test "returns error for missing kontakt_epost" do
+      selskap = %{sample_selskap() | kontakt_epost: ""}
+
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: selskap,
+        regnskapsaar: 2024,
+        aksjonaerer: [sample_aksjonaer()]
+      }
+
+      assert {:error, errors} = Aksjonaerregister.valider(oppgave)
+      assert Enum.any?(errors, &(&1 =~ "kontakt_epost"))
+    end
+
     test "returns error for invalid fodselsnummer" do
       oppgave = %Aksjonaerregisteroppgave{
         selskap: sample_selskap(),
-        regnskapsaar: 2025,
+        regnskapsaar: 2024,
         aksjonaerer: [
           %Aksjonaer{
             fodselsnummer: "1234",
@@ -153,7 +208,7 @@ defmodule Wenche.AksjonaerregisterTest do
     test "returns error when total shares is zero" do
       oppgave = %Aksjonaerregisteroppgave{
         selskap: sample_selskap(),
-        regnskapsaar: 2025,
+        regnskapsaar: 2024,
         aksjonaerer: [
           %Aksjonaer{
             fodselsnummer: "12345678901",
