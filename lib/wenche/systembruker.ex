@@ -7,10 +7,19 @@ defmodule Wenche.Systembruker do
   Altinn 3 requires that end-user systems register themselves in the system register
   and create a system user for each organization they will act on behalf of.
 
+  ## Required options
+
+  All public functions require a `:name` option — a short, lowercase identifier
+  for the system (e.g. `"kontira"`). This is used to build the system ID
+  (`<vendor_orgnr>_<name>`) and as the display name in Altinn.
+
+  `registrer_system/4` additionally requires a `:description` option — a map
+  with `"nb"`, `"nn"`, and `"en"` keys describing the system.
+
   ## Setup (run once)
 
-  1. `registrer_system/3` — registers Wenche in Altinn's system register
-  2. `opprett_forespoersel/3` — sends request to org for approval
+  1. `registrer_system/4` — registers the system in Altinn's system register
+  2. `opprett_forespoersel/4` — sends request to org for approval
   3. User approves via confirmUrl in browser
 
   For submission, use `Wenche.Maskinporten.get_systemuser_token/2` to get a token.
@@ -20,8 +29,6 @@ defmodule Wenche.Systembruker do
     "test" => "https://platform.tt02.altinn.no",
     "prod" => "https://platform.altinn.no"
   }
-
-  @system_navn "wenche"
 
   # Resource IDs for Altinn 3 apps
   @rights [
@@ -33,22 +40,35 @@ defmodule Wenche.Systembruker do
   ]
 
   @doc """
-  Returns the system ID in the format `<org_nummer>_wenche`.
+  Returns the system ID in the format `<vendor_orgnr>_<name>`.
   """
-  def system_id(vendor_orgnr), do: "#{vendor_orgnr}_#{@system_navn}"
+  def system_id(vendor_orgnr, name) when is_binary(name) and name != "" do
+    "#{vendor_orgnr}_#{name}"
+  end
 
   @doc """
-  Registers or updates Wenche in Altinn's system register.
+  Registers or updates the system in Altinn's system register.
 
   Tries POST first. If the system already exists, uses PUT to update.
+
+  ## Required options
+
+    * `:name` — short lowercase system identifier (e.g. `"kontira"`)
+    * `:description` — map with `"nb"`, `"nn"`, `"en"` keys
+
+  ## Optional options
+
+    * `:env` — `"test"` or `"prod"` (default: `"prod"`)
 
   Returns `{:ok, response_map}` or `{:error, reason}`.
   """
   def registrer_system(maskinporten_token, vendor_orgnr, client_id, opts \\ []) do
+    name = fetch_required!(opts, :name)
+    description = fetch_required!(opts, :description)
     env = Keyword.get(opts, :env, "prod")
     base = Map.fetch!(@bases, env)
-    sid = system_id(vendor_orgnr)
-    payload = bygg_system_payload(vendor_orgnr, client_id)
+    sid = system_id(vendor_orgnr, name)
+    payload = bygg_system_payload(vendor_orgnr, client_id, name, description)
 
     headers = [
       {"Authorization", "Bearer #{maskinporten_token}"},
@@ -97,16 +117,25 @@ defmodule Wenche.Systembruker do
   Returns `{:ok, %{id: uuid, status: "New", confirmUrl: url}}` or `{:error, reason}`.
 
   The user must go to confirmUrl and approve in the browser.
+
+  ## Required options
+
+    * `:name` — short lowercase system identifier (e.g. `"kontira"`)
+
+  ## Optional options
+
+    * `:env` — `"test"` or `"prod"` (default: `"prod"`)
   """
   def opprett_forespoersel(maskinporten_token, vendor_orgnr, org_nummer, opts \\ []) do
+    name = fetch_required!(opts, :name)
     env = Keyword.get(opts, :env, "prod")
     base = Map.fetch!(@bases, env)
-    sid = system_id(vendor_orgnr)
+    sid = system_id(vendor_orgnr, name)
 
     payload = %{
       "systemId" => sid,
       "partyOrgNo" => org_nummer,
-      "integrationTitle" => "Wenche",
+      "integrationTitle" => name,
       "rights" => @rights
     }
 
@@ -133,6 +162,10 @@ defmodule Wenche.Systembruker do
   Gets the status of a system user request.
 
   Returns `{:ok, response_map}` or `{:error, reason}`.
+
+  ## Optional options
+
+    * `:env` — `"test"` or `"prod"` (default: `"prod"`)
   """
   def hent_forespoersel_status(maskinporten_token, request_id, opts \\ []) do
     env = Keyword.get(opts, :env, "prod")
@@ -154,14 +187,23 @@ defmodule Wenche.Systembruker do
   end
 
   @doc """
-  Gets all approved system users for the Wenche system.
+  Gets all approved system users for the system.
 
   Returns `{:ok, [system_user_map]}` or `{:error, reason}`.
+
+  ## Required options
+
+    * `:name` — short lowercase system identifier (e.g. `"kontira"`)
+
+  ## Optional options
+
+    * `:env` — `"test"` or `"prod"` (default: `"prod"`)
   """
   def hent_systembrukere(maskinporten_token, vendor_orgnr, opts \\ []) do
+    name = fetch_required!(opts, :name)
     env = Keyword.get(opts, :env, "prod")
     base = Map.fetch!(@bases, env)
-    sid = system_id(vendor_orgnr)
+    sid = system_id(vendor_orgnr, name)
 
     headers = [{"Authorization", "Bearer #{maskinporten_token}"}]
     url = "#{base}/authentication/api/v1/systemuser/vendor/bysystem/#{sid}"
@@ -184,8 +226,8 @@ defmodule Wenche.Systembruker do
     end
   end
 
-  defp bygg_system_payload(vendor_orgnr, client_id) do
-    sid = system_id(vendor_orgnr)
+  defp bygg_system_payload(vendor_orgnr, client_id, name, description) do
+    sid = system_id(vendor_orgnr, name)
 
     %{
       "id" => sid,
@@ -194,21 +236,21 @@ defmodule Wenche.Systembruker do
         "ID" => "0192:#{vendor_orgnr}"
       },
       "name" => %{
-        "nb" => "Wenche",
-        "nn" => "Wenche",
-        "en" => "Wenche"
+        "nb" => name,
+        "nn" => name,
+        "en" => name
       },
-      "description" => %{
-        "nb" =>
-          "Enkel innsending av årsregnskap til Brønnøysundregistrene for holdingselskap.",
-        "nn" =>
-          "Enkel innsending av årsrekneskap til Brønnøysundregistra for holdingselskap.",
-        "en" =>
-          "Simple annual accounts submission to the Register of Business Enterprises."
-      },
+      "description" => description,
       "clientId" => [client_id],
       "isVisible" => true,
       "rights" => @rights
     }
+  end
+
+  defp fetch_required!(opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, value} when value != nil -> value
+      _ -> raise ArgumentError, "required option :#{key} is missing"
+    end
   end
 end

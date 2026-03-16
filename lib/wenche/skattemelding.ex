@@ -291,7 +291,9 @@ defmodule Wenche.Skattemelding do
     linje = String.duplicate("─", 60)
     b = regnskap.balanse
     ek_ub = b.egenkapital_og_gjeld.egenkapital
-    aarsresultat = Resultatregnskap.resultat_foer_skatt(regnskap.resultatregnskap) - beregnet_skatt
+
+    aarsresultat =
+      Resultatregnskap.resultat_foer_skatt(regnskap.resultatregnskap) - beregnet_skatt
 
     header_linjer = [
       "",
@@ -311,7 +313,12 @@ defmodule Wenche.Skattemelding do
         andre_aek = ek_ub.annen_egenkapital - forklart_aek
 
         base = [
-          ek_rad("EK 01.01.#{aar}", ek_ib.aksjekapital, ek_ib.overkursfond, ek_ib.annen_egenkapital),
+          ek_rad(
+            "EK 01.01.#{aar}",
+            ek_ib.aksjekapital,
+            ek_ib.overkursfond,
+            ek_ib.annen_egenkapital
+          ),
           ek_rad("Årsresultat", 0, 0, aarsresultat)
         ]
 
@@ -330,14 +337,24 @@ defmodule Wenche.Skattemelding do
           end
 
         slutt = [
-          ek_rad("EK 31.12.#{aar}", ek_ub.aksjekapital, ek_ub.overkursfond, ek_ub.annen_egenkapital)
+          ek_rad(
+            "EK 31.12.#{aar}",
+            ek_ub.aksjekapital,
+            ek_ub.overkursfond,
+            ek_ub.annen_egenkapital
+          )
         ]
 
         base ++ utbytte_linje ++ andre_linje ++ slutt
       else
         [
           "  NB: Egenkapitalbevegelse krever foregaaende_aar (rskl. § 7-2b).",
-          ek_rad("EK 31.12.#{aar}", ek_ub.aksjekapital, ek_ub.overkursfond, ek_ub.annen_egenkapital)
+          ek_rad(
+            "EK 31.12.#{aar}",
+            ek_ub.aksjekapital,
+            ek_ub.overkursfond,
+            ek_ub.annen_egenkapital
+          )
         ]
       end
 

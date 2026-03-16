@@ -2,6 +2,7 @@ defmodule Wenche.SkattemeldingTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Skattemelding
+
   alias Wenche.Models.{
     Aarsregnskap,
     Selskap,

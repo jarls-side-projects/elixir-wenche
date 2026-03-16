@@ -2,6 +2,7 @@ defmodule Wenche.BrgXmlTest do
   use ExUnit.Case, async: true
 
   alias Wenche.BrgXml
+
   alias Wenche.Models.{
     Aarsregnskap,
     Selskap,

@@ -2,6 +2,7 @@ defmodule Wenche.AarsregnskapTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Aarsregnskap
+
   alias Wenche.Models.{
     Aarsregnskap,
     Selskap,
@@ -38,7 +39,10 @@ defmodule Wenche.AarsregnskapTest do
       resultatregnskap: %Resultatregnskap{
         driftsinntekter: %Driftsinntekter{salgsinntekter: 0, andre_driftsinntekter: 0},
         driftskostnader: %Driftskostnader{andre_driftskostnader: 5_000},
-        finansposter: %Finansposter{utbytte_fra_datterselskap: 100_000, andre_finansinntekter: 500}
+        finansposter: %Finansposter{
+          utbytte_fra_datterselskap: 100_000,
+          andre_finansinntekter: 500
+        }
       },
       balanse: %Balanse{
         eiendeler: %Eiendeler{

@@ -2,6 +2,7 @@ defmodule Wenche.IxbrlTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Ixbrl
+
   alias Wenche.Models.{
     Aarsregnskap,
     Selskap,
