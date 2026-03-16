@@ -102,7 +102,7 @@ defmodule Wenche.Maskinporten do
     client_id = Keyword.fetch!(config, :client_id)
     kid = Keyword.fetch!(config, :kid)
     private_key_pem = Keyword.fetch!(config, :private_key_pem)
-    audience = Map.fetch!(@maskinporten_urls, env)
+    audience = Map.fetch!(@maskinporten_urls, env) <> "/"
     org_nummer = Keyword.get(opts, :org_nummer)
 
     now = System.os_time(:second)

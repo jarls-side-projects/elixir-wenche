@@ -35,7 +35,7 @@ defmodule Wenche.MaskinportenTest do
       # Decode payload to check claims
       payload = parts |> Enum.at(1) |> Base.url_decode64!(padding: false) |> Jason.decode!()
       assert payload["iss"] == "test-client-id"
-      assert payload["aud"] == "https://test.maskinporten.no"
+      assert payload["aud"] == "https://test.maskinporten.no/"
       assert payload["scope"] == "altinn:instances.read"
       assert is_integer(payload["iat"])
       assert is_integer(payload["exp"])
@@ -54,7 +54,7 @@ defmodule Wenche.MaskinportenTest do
       assert {:ok, jwt} = Maskinporten.build_jwt_grant(config, "altinn:instances.read")
       parts = String.split(jwt, ".")
       payload = parts |> Enum.at(1) |> Base.url_decode64!(padding: false) |> Jason.decode!()
-      assert payload["aud"] == "https://maskinporten.no"
+      assert payload["aud"] == "https://maskinporten.no/"
     end
 
     test "adds authorization_details when org_nummer is provided", %{private_key_pem: pem} do
