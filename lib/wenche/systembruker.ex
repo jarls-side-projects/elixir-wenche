@@ -31,10 +31,17 @@ defmodule Wenche.Systembruker do
   }
 
   # Resource IDs for Altinn 3 apps
+  # BRG årsregnskap: Altinn 3-app, ressurs-ID på format app_{org}_{appnavn}.
+  # SKD aksjonærregisteroppgave: SKDs eget REST-API, ressurs-ID fra SKDs API-dokumentasjon.
   @rights [
     %{
       "resource" => [
         %{"id" => "urn:altinn:resource", "value" => "app_brg_aarsregnskap-vanlig-202406"}
+      ]
+    },
+    %{
+      "resource" => [
+        %{"id" => "urn:altinn:resource", "value" => "ske-innrapportering-aksjonaerregisteroppgave"}
       ]
     }
   ]
