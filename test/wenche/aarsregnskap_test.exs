@@ -17,7 +17,8 @@ defmodule Wenche.AarsregnskapTest do
     EgenkapitalOgGjeld,
     Egenkapital,
     LangsiktigGjeld,
-    KortsiktigGjeld
+    KortsiktigGjeld,
+    Noter
   }
 
   def sample_selskap do
@@ -91,6 +92,56 @@ defmodule Wenche.AarsregnskapTest do
 
       errors = Wenche.Aarsregnskap.valider(regnskap)
       assert Enum.any?(errors, &(&1 =~ "Organisasjonsnummeret må være 9 siffer"))
+    end
+
+    test "warns when loennskostnader > 0 but antall_ansatte is 0" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftskostnader: %Driftskostnader{loennskostnader: 100_000}
+          },
+          noter: %Noter{antall_ansatte: 0}
+      }
+
+      # Fix balance to match
+      regnskap = %{
+        regnskap
+        | balanse: %Balanse{
+            eiendeler: %Eiendeler{
+              anleggsmidler: %Anleggsmidler{aksjer_i_datterselskap: 500_000},
+              omloepmidler: %Omloepmidler{bankinnskudd: 125_500}
+            },
+            egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+              egenkapital: %Egenkapital{aksjekapital: 30_000, annen_egenkapital: 595_500},
+              langsiktig_gjeld: %LangsiktigGjeld{},
+              kortsiktig_gjeld: %KortsiktigGjeld{}
+            }
+          }
+      }
+
+      errors = Wenche.Aarsregnskap.valider(regnskap)
+      assert Enum.any?(errors, &(&1 =~ "Lønnskostnader > 0 men antall ansatte er 0"))
+    end
+
+    test "warns when laan_fra_aksjonaer > 0 but no laan_til_naerstaaende" do
+      regnskap = %{
+        sample_regnskap()
+        | balanse: %Balanse{
+            eiendeler: %Eiendeler{
+              anleggsmidler: %Anleggsmidler{aksjer_i_datterselskap: 500_000},
+              omloepmidler: %Omloepmidler{bankinnskudd: 225_500}
+            },
+            egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+              egenkapital: %Egenkapital{aksjekapital: 30_000, annen_egenkapital: 595_500},
+              langsiktig_gjeld: %LangsiktigGjeld{laan_fra_aksjonaer: 100_000},
+              kortsiktig_gjeld: %KortsiktigGjeld{}
+            }
+          },
+          noter: %Noter{laan_til_naerstaaende: []}
+      }
+
+      errors = Wenche.Aarsregnskap.valider(regnskap)
+      assert Enum.any?(errors, &(&1 =~ "Lån fra aksjonær"))
     end
   end
 end
