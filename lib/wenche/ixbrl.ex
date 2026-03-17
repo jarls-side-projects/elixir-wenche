@@ -203,11 +203,25 @@ defmodule Wenche.Ixbrl do
         <tr><td><strong>SUM EGENKAPITAL OG GJELD</strong></td>
             <td><strong>#{tag("EquityAndLiabilities", EgenkapitalOgGjeld.sum(b.egenkapital_og_gjeld), "c1")}</strong></td></tr>
       </table>
+
+      <h2>Noter</h2>
+    #{noter_html(regnskap)}
     </body>
     </html>
     """
 
     String.trim(html)
+  end
+
+  defp noter_html(%Aarsregnskap{} = regnskap) do
+    Wenche.Noter.generer_noter_tekst(regnskap)
+    |> Enum.map(fn {title, content} ->
+      """
+        <h3>#{escape(title)}</h3>
+        <p style="white-space:pre-line">#{escape(content)}</p>
+      """
+    end)
+    |> Enum.join("\n")
   end
 
   defp tag(concept, value, context) do

@@ -21,7 +21,9 @@ defmodule Wenche.Aarsregnskap do
     EgenkapitalOgGjeld,
     Egenkapital,
     LangsiktigGjeld,
-    KortsiktigGjeld
+    KortsiktigGjeld,
+    Noter,
+    LaanTilNaerstaaende
   }
 
   alias Wenche.{AltinnClient, BrgXml}
@@ -63,6 +65,23 @@ defmodule Wenche.Aarsregnskap do
     errors =
       if String.length(org) != 9 do
         ["Organisasjonsnummeret må være 9 siffer." | errors]
+      else
+        errors
+      end
+
+    noter = regnskap.noter
+
+    errors =
+      if noter.antall_ansatte == 0 and regnskap.resultatregnskap.driftskostnader.loennskostnader > 0 do
+        ["Advarsel: Lønnskostnader > 0 men antall ansatte er 0 i noter." | errors]
+      else
+        errors
+      end
+
+    errors =
+      if regnskap.balanse.egenkapital_og_gjeld.langsiktig_gjeld.laan_fra_aksjonaer > 0 and
+           noter.laan_til_naerstaaende == [] do
+        ["Advarsel: Lån fra aksjonær i balansen men ingen lån til nærstående i noter (§7-45)." | errors]
       else
         errors
       end
@@ -165,6 +184,8 @@ defmodule Wenche.Aarsregnskap do
       |> Enum.map(fn a -> a["utbytte_utbetalt"] || 0 end)
       |> Enum.sum()
 
+    noter = les_noter(cfg["noter"] || %{})
+
     %Aarsregnskap{
       selskap: selskap,
       regnskapsaar: cfg["regnskapsaar"],
@@ -172,7 +193,8 @@ defmodule Wenche.Aarsregnskap do
       balanse: balanse,
       foregaaende_aar_resultat: foregaaende_resultat,
       foregaaende_aar_balanse: foregaaende_balanse,
-      utbytte_utbetalt: utbytte_utbetalt
+      utbytte_utbetalt: utbytte_utbetalt,
+      noter: noter
     }
   end
 
@@ -237,6 +259,27 @@ defmodule Wenche.Aarsregnskap do
           annen_kortsiktig_gjeld: kg["annen_kortsiktig_gjeld"] || 0
         }
       }
+    }
+  end
+
+  defp les_noter(n) do
+    laan = (n["laan_til_naerstaaende"] || [])
+    |> Enum.map(fn l ->
+      %LaanTilNaerstaaende{
+        navn: l["navn"],
+        rolle: l["rolle"],
+        beloep: l["beloep"] || 0,
+        rentesats: l["rentesats"],
+        avdragsplan: l["avdragsplan"]
+      }
+    end)
+
+    %Noter{
+      antall_ansatte: n["antall_ansatte"] || 0,
+      regnskapsprinsipper: n["regnskapsprinsipper"],
+      laan_til_naerstaaende: laan,
+      fortsatt_drift_usikkerhet: n["fortsatt_drift_usikkerhet"] || false,
+      fortsatt_drift_beskrivelse: n["fortsatt_drift_beskrivelse"]
     }
   end
 end

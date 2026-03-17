@@ -97,6 +97,37 @@ defmodule Wenche.BrgXmlTest do
       assert xml =~ "balanseEgenkapitalGjeld"
     end
 
+    test "underskjema XML has balanced open/close tags" do
+      xml = BrgXml.generer_underskjema(sample_regnskap())
+
+      # Extract all tags: {:open, name} or {:close, name} (ignoring self-closing, xml decl, comments)
+      tags =
+        Regex.scan(~r/<(\/?)([a-zA-Z][\w-]*)[^>]*?>/, xml)
+        |> Enum.map(fn
+          [_, "", name] -> {:open, name}
+          [_, "/", name] -> {:close, name}
+        end)
+
+      # Walk tags with a stack — every close must match the most recent open
+      result =
+        Enum.reduce_while(tags, [], fn
+          {:open, name}, stack ->
+            {:cont, [name | stack]}
+
+          {:close, name}, [name | rest] ->
+            {:cont, rest}
+
+          {:close, name}, stack ->
+            {:halt, {:mismatch, name, stack}}
+        end)
+
+      case result do
+        [] -> assert true
+        {:mismatch, name, stack} -> flunk("Closing </#{name}> does not match open tag stack: #{inspect(Enum.take(stack, 3))}")
+        remaining -> flunk("Unclosed tags remaining: #{inspect(remaining)}")
+      end
+    end
+
     test "includes driftsinntekter" do
       xml = BrgXml.generer_underskjema(sample_regnskap())
 
@@ -125,6 +156,48 @@ defmodule Wenche.BrgXmlTest do
 
       # Driftsresultat = 500000 - (200000 + 50000 + 100000) = 150000
       assert xml =~ "<aarets orid=\"146\">150000</aarets>"
+    end
+
+    test "includes noter section with antallAarsverk" do
+      xml = BrgXml.generer_underskjema(sample_regnskap())
+
+      assert xml =~ "<noter>"
+      assert xml =~ "</noter>"
+      assert xml =~ "<antallAarsverk orid=\"37467\">0</antallAarsverk>"
+    end
+
+    test "includes noter with custom antall_ansatte" do
+      regnskap = %{sample_regnskap() | noter: %Wenche.Models.Noter{antall_ansatte: 2}}
+      xml = BrgXml.generer_underskjema(regnskap)
+
+      assert xml =~ "<antallAarsverk orid=\"37467\">2</antallAarsverk>"
+    end
+
+    test "includes egenkapital note in noter when prior year exists" do
+      regnskap = %{
+        sample_regnskap()
+        | foregaaende_aar_balanse: %Balanse{
+            eiendeler: %Eiendeler{
+              anleggsmidler: %Anleggsmidler{aksjer_i_datterselskap: 200_000},
+              omloepmidler: %Omloepmidler{bankinnskudd: 200_000}
+            },
+            egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+              egenkapital: %Egenkapital{
+                aksjekapital: 100_000,
+                overkursfond: 0,
+                annen_egenkapital: 50_000
+              },
+              langsiktig_gjeld: %LangsiktigGjeld{laan_fra_aksjonaer: 100_000},
+              kortsiktig_gjeld: %KortsiktigGjeld{leverandoergjeld: 150_000}
+            }
+          }
+      }
+
+      xml = BrgXml.generer_underskjema(regnskap)
+
+      assert xml =~ "<noteEgenkapital>"
+      assert xml =~ "<egenkapitalAapningsbalanse>"
+      assert xml =~ "<egenkapitalAvslutningsbalanse>"
     end
   end
 end

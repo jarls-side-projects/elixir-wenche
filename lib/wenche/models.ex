@@ -237,12 +237,48 @@ defmodule Wenche.Models do
   end
 
   # ---------------------------------------------------------------------------
+  # Notes (noter)
+  # ---------------------------------------------------------------------------
+
+  defmodule LaanTilNaerstaaende do
+    @moduledoc "Loan to related party (§7-45)."
+    defstruct [:navn, :rolle, :beloep, :rentesats, :avdragsplan]
+
+    @type t :: %__MODULE__{
+            navn: String.t(),
+            rolle: String.t(),
+            beloep: integer(),
+            rentesats: float() | nil,
+            avdragsplan: String.t() | nil
+          }
+  end
+
+  defmodule Noter do
+    @moduledoc "Notes for annual accounts (regnskapsloven §§ 7-35 to 7-46)."
+    alias Wenche.Models.LaanTilNaerstaaende
+
+    defstruct antall_ansatte: 0,
+              regnskapsprinsipper: nil,
+              laan_til_naerstaaende: [],
+              fortsatt_drift_usikkerhet: false,
+              fortsatt_drift_beskrivelse: nil
+
+    @type t :: %__MODULE__{
+            antall_ansatte: non_neg_integer(),
+            regnskapsprinsipper: String.t() | nil,
+            laan_til_naerstaaende: [LaanTilNaerstaaende.t()],
+            fortsatt_drift_usikkerhet: boolean(),
+            fortsatt_drift_beskrivelse: String.t() | nil
+          }
+  end
+
+  # ---------------------------------------------------------------------------
   # Annual accounts
   # ---------------------------------------------------------------------------
 
   defmodule Aarsregnskap do
     @moduledoc "Full annual accounts."
-    alias Wenche.Models.{Selskap, Resultatregnskap, Balanse}
+    alias Wenche.Models.{Selskap, Resultatregnskap, Balanse, Noter}
 
     defstruct [
       :selskap,
@@ -254,7 +290,8 @@ defmodule Wenche.Models do
       revideres: false,
       foregaaende_aar_resultat: %Resultatregnskap{},
       foregaaende_aar_balanse: %Balanse{},
-      utbytte_utbetalt: 0
+      utbytte_utbetalt: 0,
+      noter: %Noter{}
     ]
 
     @type t :: %__MODULE__{
@@ -267,7 +304,8 @@ defmodule Wenche.Models do
             revideres: boolean(),
             foregaaende_aar_resultat: Resultatregnskap.t(),
             foregaaende_aar_balanse: Balanse.t(),
-            utbytte_utbetalt: integer()
+            utbytte_utbetalt: integer(),
+            noter: Noter.t()
           }
   end
 
