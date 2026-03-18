@@ -133,7 +133,7 @@ defmodule Wenche.Aksjonaerregister do
                 <Inntektsar-datadef-692 orid="692">#{aar}</Inntektsar-datadef-692>
             </Selskapsidentifikasjon-grp-3986>
             <NorskUtenlandskAksjonar-grp-3988 gruppeid="3988">
-                <AksjonarFodselsnummer-datadef-1156 orid="1156">#{escape(aksjonaer.fodselsnummer)}</AksjonarFodselsnummer-datadef-1156>
+                #{shareholder_identification_xml(aksjonaer)}
                 <Adresse-grp-7722 gruppeid="7722"></Adresse-grp-7722>
             </NorskUtenlandskAksjonar-grp-3988>
         </SelskapsOgAksjonaropplysninger-grp-3987>
@@ -202,15 +202,14 @@ defmodule Wenche.Aksjonaerregister do
         errors
       end
 
-    fnr_errors =
+    id_errors =
       oppgave.aksjonaerer
-      |> Enum.filter(fn a ->
-        fnr = String.replace(a.fodselsnummer, " ", "")
-        String.length(fnr) != 11 or not String.match?(fnr, ~r/^\d+$/)
+      |> Enum.filter(fn a -> not valid_shareholder_id?(a) end)
+      |> Enum.map(fn a ->
+        "Ugyldig identifikasjon for #{a.navn}: fødselsnummer må være 11 siffer, organisasjonsnummer må være 9 siffer."
       end)
-      |> Enum.map(fn a -> "Ugyldig fødselsnummer for #{a.navn}: må være 11 siffer." end)
 
-    errors = fnr_errors ++ errors
+    errors = id_errors ++ errors
 
     total_aksjer = Aksjonaerregisteroppgave.totalt_antall_aksjer(oppgave)
 
@@ -231,6 +230,9 @@ defmodule Wenche.Aksjonaerregister do
   @doc """
   Validates a list of shareholders (legacy API).
 
+  Supports both person shareholders (fodselsnummer - 11 digits) and
+  company shareholders (organisasjonsnummer - 9 digits).
+
   Returns `:ok` or `{:error, reason}`.
   """
   def validate_shareholders([]), do: {:error, :no_shareholders}
@@ -242,16 +244,39 @@ defmodule Wenche.Aksjonaerregister do
       total_shares <= 0 ->
         {:error, :invalid_total_shares}
 
-      Enum.any?(shareholders, fn s ->
-        fnr = s.fodselsnummer |> to_string() |> String.replace(" ", "")
-        not Regex.match?(~r/^\d{11}$/, fnr)
-      end) ->
-        {:error, :invalid_fodselsnummer}
+      Enum.any?(shareholders, fn s -> not valid_shareholder_id?(s) end) ->
+        {:error, :invalid_identification}
 
       true ->
         :ok
     end
   end
+
+  # Validates shareholder has valid identification (either fnr or org.nr)
+  defp valid_shareholder_id?(%{organisasjonsnummer: org}) when is_binary(org) and org != "" do
+    org_clean = String.replace(org, " ", "")
+    String.length(org_clean) == 9 and String.match?(org_clean, ~r/^\d+$/)
+  end
+
+  defp valid_shareholder_id?(%{fodselsnummer: fnr}) when is_binary(fnr) and fnr != "" do
+    fnr_clean = String.replace(fnr, " ", "")
+    String.length(fnr_clean) == 11 and String.match?(fnr_clean, ~r/^\d+$/)
+  end
+
+  defp valid_shareholder_id?(_), do: false
+
+  # Generates the appropriate identification XML element based on shareholder type
+  defp shareholder_identification_xml(%{organisasjonsnummer: org})
+       when is_binary(org) and org != "" do
+    "<AksjonarOrganisasjonsnummer-datadef-7597 orid=\"7597\">#{escape(org)}</AksjonarOrganisasjonsnummer-datadef-7597>"
+  end
+
+  defp shareholder_identification_xml(%{fodselsnummer: fnr})
+       when is_binary(fnr) and fnr != "" do
+    "<AksjonarFodselsnummer-datadef-1156 orid=\"1156\">#{escape(fnr)}</AksjonarFodselsnummer-datadef-1156>"
+  end
+
+  defp shareholder_identification_xml(_), do: ""
 
   defp escape(nil), do: ""
 

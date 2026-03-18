@@ -28,6 +28,17 @@ defmodule Wenche.AksjonaerregisterTest do
     }
   end
 
+  def sample_company_aksjonaer do
+    %Aksjonaer{
+      organisasjonsnummer: "987654321",
+      navn: "Holding AS",
+      antall_aksjer: 50,
+      aksjeklasse: "A",
+      utbytte_utbetalt: 0,
+      innbetalt_kapital_per_aksje: 300
+    }
+  end
+
   def sample_oppgave do
     %Aksjonaerregisteroppgave{
       selskap: sample_selskap(),
@@ -150,6 +161,28 @@ defmodule Wenche.AksjonaerregisterTest do
       assert xml =~
                "<EnhetOrganisasjonsnummer-datadef-18 orid=\"18\">912345678</EnhetOrganisasjonsnummer-datadef-18>"
     end
+
+    test "includes organisasjonsnummer for company shareholder" do
+      oppgave = sample_oppgave()
+      company_aksjonaer = sample_company_aksjonaer()
+      xml = Aksjonaerregister.generer_underskjema_xml(company_aksjonaer, oppgave)
+
+      assert xml =~
+               "<AksjonarOrganisasjonsnummer-datadef-7597 orid=\"7597\">987654321</AksjonarOrganisasjonsnummer-datadef-7597>"
+
+      refute xml =~ "AksjonarFodselsnummer-datadef-1156"
+    end
+
+    test "includes fødselsnummer for person shareholder, not organisasjonsnummer" do
+      oppgave = sample_oppgave()
+      aksjonaer = hd(oppgave.aksjonaerer)
+      xml = Aksjonaerregister.generer_underskjema_xml(aksjonaer, oppgave)
+
+      assert xml =~
+               "<AksjonarFodselsnummer-datadef-1156 orid=\"1156\">12345678901</AksjonarFodselsnummer-datadef-1156>"
+
+      refute xml =~ "AksjonarOrganisasjonsnummer-datadef-7597"
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -202,7 +235,7 @@ defmodule Wenche.AksjonaerregisterTest do
       }
 
       assert {:error, errors} = Aksjonaerregister.valider(oppgave)
-      assert Enum.any?(errors, &(&1 =~ "Ugyldig fødselsnummer"))
+      assert Enum.any?(errors, &(&1 =~ "Ugyldig identifikasjon"))
     end
 
     test "returns error when total shares is zero" do
@@ -224,14 +257,91 @@ defmodule Wenche.AksjonaerregisterTest do
       assert {:error, errors} = Aksjonaerregister.valider(oppgave)
       assert Enum.any?(errors, &(&1 =~ "Totalt antall aksjer må være større enn 0"))
     end
+
+    test "returns :ok for valid company shareholder" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2024,
+        aksjonaerer: [sample_company_aksjonaer()]
+      }
+
+      assert :ok = Aksjonaerregister.valider(oppgave)
+    end
+
+    test "returns :ok for mixed person and company shareholders" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2024,
+        aksjonaerer: [sample_aksjonaer(), sample_company_aksjonaer()]
+      }
+
+      assert :ok = Aksjonaerregister.valider(oppgave)
+    end
+
+    test "returns error for invalid organisasjonsnummer" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2024,
+        aksjonaerer: [
+          %Aksjonaer{
+            organisasjonsnummer: "1234",
+            navn: "Invalid Company AS",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 0,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      assert {:error, errors} = Aksjonaerregister.valider(oppgave)
+      assert Enum.any?(errors, &(&1 =~ "Ugyldig identifikasjon"))
+    end
+
+    test "returns error for shareholder with neither fnr nor org.nr" do
+      oppgave = %Aksjonaerregisteroppgave{
+        selskap: sample_selskap(),
+        regnskapsaar: 2024,
+        aksjonaerer: [
+          %Aksjonaer{
+            navn: "No ID Person",
+            antall_aksjer: 100,
+            aksjeklasse: "A",
+            utbytte_utbetalt: 0,
+            innbetalt_kapital_per_aksje: 100
+          }
+        ]
+      }
+
+      assert {:error, errors} = Aksjonaerregister.valider(oppgave)
+      assert Enum.any?(errors, &(&1 =~ "Ugyldig identifikasjon"))
+    end
   end
 
   # Legacy API tests
   describe "validate_shareholders/1 (legacy)" do
-    test "returns :ok for valid shareholders" do
+    test "returns :ok for valid person shareholders" do
       shareholders = [
         %{fodselsnummer: "12345678901", antall_aksjer: 100},
         %{fodselsnummer: "98765432101", antall_aksjer: 50}
+      ]
+
+      assert :ok = Aksjonaerregister.validate_shareholders(shareholders)
+    end
+
+    test "returns :ok for valid company shareholders" do
+      shareholders = [
+        %{organisasjonsnummer: "987654321", antall_aksjer: 100},
+        %{organisasjonsnummer: "123456789", antall_aksjer: 50}
+      ]
+
+      assert :ok = Aksjonaerregister.validate_shareholders(shareholders)
+    end
+
+    test "returns :ok for mixed person and company shareholders" do
+      shareholders = [
+        %{fodselsnummer: "12345678901", antall_aksjer: 100},
+        %{organisasjonsnummer: "987654321", antall_aksjer: 50}
       ]
 
       assert :ok = Aksjonaerregister.validate_shareholders(shareholders)
@@ -244,7 +354,14 @@ defmodule Wenche.AksjonaerregisterTest do
     test "returns error for invalid fodselsnummer" do
       shareholders = [%{fodselsnummer: "1234", antall_aksjer: 100}]
 
-      assert {:error, :invalid_fodselsnummer} =
+      assert {:error, :invalid_identification} =
+               Aksjonaerregister.validate_shareholders(shareholders)
+    end
+
+    test "returns error for invalid organisasjonsnummer" do
+      shareholders = [%{organisasjonsnummer: "1234", antall_aksjer: 100}]
+
+      assert {:error, :invalid_identification} =
                Aksjonaerregister.validate_shareholders(shareholders)
     end
 

@@ -314,10 +314,17 @@ defmodule Wenche.Models do
   # ---------------------------------------------------------------------------
 
   defmodule Aksjonaer do
-    @moduledoc "Individual shareholder."
+    @moduledoc """
+    Individual shareholder.
+
+    Supports both person shareholders (fodselsnummer - 11 digits) and
+    company shareholders (organisasjonsnummer - 9 digits).
+    Exactly one of fodselsnummer or organisasjonsnummer should be set.
+    """
     defstruct [
       :navn,
       :fodselsnummer,
+      :organisasjonsnummer,
       :antall_aksjer,
       :aksjeklasse,
       :utbytte_utbetalt,
@@ -326,7 +333,8 @@ defmodule Wenche.Models do
 
     @type t :: %__MODULE__{
             navn: String.t(),
-            fodselsnummer: String.t(),
+            fodselsnummer: String.t() | nil,
+            organisasjonsnummer: String.t() | nil,
             antall_aksjer: integer(),
             aksjeklasse: String.t(),
             utbytte_utbetalt: integer(),
