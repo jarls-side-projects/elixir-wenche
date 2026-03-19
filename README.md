@@ -1,5 +1,7 @@
 # Wenche (Elixir)
 
+[![Hex.pm](https://img.shields.io/hexpm/v/wenche.svg)](https://hex.pm/packages/wenche)
+
 Elixir library for Norwegian small business filings — Maskinporten authentication,
 Altinn 3 API client, BRG XML/iXBRL generation, tax calculation, and shareholder
 register XML generation.
