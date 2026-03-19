@@ -29,7 +29,7 @@ Add `wenche` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:wenche, "~> 0.1.0"}
+    {:wenche, "~> 0.1.1"}
   ]
 end
 ```
