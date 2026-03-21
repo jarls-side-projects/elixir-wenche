@@ -145,7 +145,7 @@ defmodule Wenche.Systembruker do
     end
   end
 
-  defp normalize_update_response(body, sid) when is_map(body) and map_size(body) > 0 do
+  defp normalize_update_response(body, _sid) when is_map(body) and map_size(body) > 0 do
     {:ok, body}
   end
 
