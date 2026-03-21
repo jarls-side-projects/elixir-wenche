@@ -2,7 +2,7 @@ defmodule Wenche.AksjonaerregisterTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Aksjonaerregister
-  alias Wenche.Models.{Aksjonaerregisteroppgave, Aksjonaer, Selskap}
+  alias Wenche.Models.{Aksjonaer, Aksjonaerregisteroppgave, Selskap}
 
   def sample_selskap do
     %Selskap{

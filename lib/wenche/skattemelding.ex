@@ -17,19 +17,19 @@ defmodule Wenche.Skattemelding do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    SkattemeldingKonfig,
-    Resultatregnskap,
+    Anleggsmidler,
     Balanse,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
     Egenkapital,
     EgenkapitalOgGjeld,
+    Eiendeler,
+    Finansposter,
+    KortsiktigGjeld,
     LangsiktigGjeld,
-    KortsiktigGjeld
+    Omloepmidler,
+    Resultatregnskap,
+    SkattemeldingKonfig
   }
 
   alias Wenche.{AltinnClient, SkattemeldingXml, SkdSkattemeldingClient}
@@ -729,9 +729,8 @@ defmodule Wenche.Skattemelding do
                "skattemelding",
                request_xml,
                "application/xml"
-             ),
-           {:ok, inbox_url} <- AltinnClient.fullfoor_instans(client, "skattemelding", instans) do
-        {:ok, inbox_url}
+             ) do
+        AltinnClient.fullfoor_instans(client, "skattemelding", instans)
       end
     end
   end

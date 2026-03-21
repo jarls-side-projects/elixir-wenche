@@ -2,21 +2,21 @@ defmodule Wenche.ModelsTest do
   use ExUnit.Case, async: true
 
   alias Wenche.Models.{
-    Selskap,
-    Driftsinntekter,
-    Driftskostnader,
-    Finansposter,
-    Resultatregnskap,
-    Anleggsmidler,
-    Omloepmidler,
-    Eiendeler,
-    Egenkapital,
-    LangsiktigGjeld,
-    KortsiktigGjeld,
-    EgenkapitalOgGjeld,
-    Balanse,
     Aksjonaer,
     Aksjonaerregisteroppgave,
+    Anleggsmidler,
+    Balanse,
+    Driftsinntekter,
+    Driftskostnader,
+    Egenkapital,
+    EgenkapitalOgGjeld,
+    Eiendeler,
+    Finansposter,
+    KortsiktigGjeld,
+    LangsiktigGjeld,
+    Omloepmidler,
+    Resultatregnskap,
+    Selskap,
     SkattemeldingKonfig
   }
 
@@ -29,12 +29,12 @@ defmodule Wenche.ModelsTest do
         styreleder: "Kari Nordmann",
         forretningsadresse: "Storgata 1, 0001 Oslo",
         stiftelsesaar: 2020,
-        aksjekapital: 30000
+        aksjekapital: 30_000
       }
 
       assert selskap.navn == "Test AS"
       assert selskap.org_nummer == "912345678"
-      assert selskap.aksjekapital == 30000
+      assert selskap.aksjekapital == 30_000
     end
   end
 

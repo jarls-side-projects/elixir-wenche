@@ -33,7 +33,8 @@ defmodule Wenche.MixProject do
       {:uuid, "~> 1.1"},
       {:yaml_elixir, "~> 2.11"},
       {:plug, "~> 1.0", only: :test},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 

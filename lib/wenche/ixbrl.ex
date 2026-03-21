@@ -13,16 +13,16 @@ defmodule Wenche.Ixbrl do
 
   alias Wenche.Models.{
     Aarsregnskap,
+    Anleggsmidler,
     Driftsinntekter,
     Driftskostnader,
-    Resultatregnskap,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
     Egenkapital,
-    LangsiktigGjeld,
+    EgenkapitalOgGjeld,
+    Eiendeler,
     KortsiktigGjeld,
-    EgenkapitalOgGjeld
+    LangsiktigGjeld,
+    Omloepmidler,
+    Resultatregnskap
   }
 
   @doc """
@@ -215,13 +215,12 @@ defmodule Wenche.Ixbrl do
 
   defp noter_html(%Aarsregnskap{} = regnskap) do
     Wenche.Noter.generer_noter_tekst(regnskap)
-    |> Enum.map(fn {title, content} ->
+    |> Enum.map_join("\n", fn {title, content} ->
       """
         <h3>#{escape(title)}</h3>
         <p style="white-space:pre-line">#{escape(content)}</p>
       """
     end)
-    |> Enum.join("\n")
   end
 
   defp tag(concept, value, context) do

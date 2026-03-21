@@ -199,7 +199,7 @@ defmodule Wenche.Models do
 
   defmodule EgenkapitalOgGjeld do
     @moduledoc "Equity and liabilities."
-    alias Wenche.Models.{Egenkapital, LangsiktigGjeld, KortsiktigGjeld}
+    alias Wenche.Models.{Egenkapital, KortsiktigGjeld, LangsiktigGjeld}
 
     defstruct egenkapital: %Egenkapital{},
               langsiktig_gjeld: %LangsiktigGjeld{},
@@ -220,7 +220,7 @@ defmodule Wenche.Models do
 
   defmodule Balanse do
     @moduledoc "Balance sheet."
-    alias Wenche.Models.{Eiendeler, EgenkapitalOgGjeld}
+    alias Wenche.Models.{EgenkapitalOgGjeld, Eiendeler}
 
     defstruct eiendeler: %Eiendeler{}, egenkapital_og_gjeld: %EgenkapitalOgGjeld{}
 
@@ -278,7 +278,7 @@ defmodule Wenche.Models do
 
   defmodule Aarsregnskap do
     @moduledoc "Full annual accounts."
-    alias Wenche.Models.{Selskap, Resultatregnskap, Balanse, Noter}
+    alias Wenche.Models.{Balanse, Noter, Resultatregnskap, Selskap}
 
     defstruct [
       :selskap,
@@ -344,7 +344,7 @@ defmodule Wenche.Models do
 
   defmodule Aksjonaerregisteroppgave do
     @moduledoc "Shareholder register submission (RF-1086)."
-    alias Wenche.Models.{Selskap, Aksjonaer}
+    alias Wenche.Models.{Aksjonaer, Selskap}
 
     defstruct [:selskap, :regnskapsaar, aksjonaerer: []]
 

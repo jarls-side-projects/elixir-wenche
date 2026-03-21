@@ -9,21 +9,21 @@ defmodule Wenche.Aarsregnskap do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    Selskap,
-    Resultatregnskap,
+    Anleggsmidler,
     Balanse,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
-    EgenkapitalOgGjeld,
     Egenkapital,
-    LangsiktigGjeld,
+    EgenkapitalOgGjeld,
+    Eiendeler,
+    Finansposter,
     KortsiktigGjeld,
+    LaanTilNaerstaaende,
+    LangsiktigGjeld,
     Noter,
-    LaanTilNaerstaaende
+    Omloepmidler,
+    Resultatregnskap,
+    Selskap
   }
 
   alias Wenche.{AltinnClient, BrgXml}
@@ -49,15 +49,15 @@ defmodule Wenche.Aarsregnskap do
     errors = []
 
     errors =
-      if not Balanse.er_i_balanse?(regnskap.balanse) do
+      if Balanse.er_i_balanse?(regnskap.balanse) do
+        errors
+      else
         diff = Balanse.differanse(regnskap.balanse)
 
         [
           "Balansen går ikke opp: eiendeler og egenkapital+gjeld avviker med #{diff} NOK."
           | errors
         ]
-      else
-        errors
       end
 
     org = String.replace(regnskap.selskap.org_nummer, " ", "")
@@ -141,9 +141,8 @@ defmodule Wenche.Aarsregnskap do
                  "Underskjema",
                  underskjema,
                  "application/xml"
-               ),
-             {:ok, inbox_url} <- AltinnClient.fullfoor_instans(client, "aarsregnskap", instans) do
-          {:ok, inbox_url}
+               ) do
+          AltinnClient.fullfoor_instans(client, "aarsregnskap", instans)
         end
       end
     end

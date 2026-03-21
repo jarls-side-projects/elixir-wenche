@@ -12,15 +12,15 @@ defmodule Wenche.SkattemeldingXml do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    SkattemeldingKonfig,
-    Resultatregnskap,
+    Anleggsmidler,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
     Eiendeler,
-    Anleggsmidler,
+    Finansposter,
+    KortsiktigGjeld,
     LangsiktigGjeld,
-    KortsiktigGjeld
+    Resultatregnskap,
+    SkattemeldingKonfig
   }
 
   @skattemelding_ns "urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5"
