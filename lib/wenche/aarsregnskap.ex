@@ -103,48 +103,56 @@ defmodule Wenche.Aarsregnskap do
   Returns `{:ok, inbox_url}` or `{:error, reason}`.
   """
   def send_inn(%Aarsregnskap{} = regnskap, %AltinnClient{} = client, opts \\ []) do
+    case valider(regnskap) do
+      [] -> do_send_inn(regnskap, client, opts)
+      errors -> {:error, {:validation_failed, errors}}
+    end
+  end
+
+  defp do_send_inn(regnskap, client, opts) do
     dry_run = Keyword.get(opts, :dry_run, false)
+    hovedskjema = BrgXml.generer_hovedskjema(regnskap)
+    underskjema = BrgXml.generer_underskjema(regnskap)
+    org = regnskap.selskap.org_nummer
+    aar = regnskap.regnskapsaar
 
-    errors = valider(regnskap)
-
-    if errors != [] do
-      {:error, {:validation_failed, errors}}
+    if dry_run do
+      write_dry_run_files(aar, org, hovedskjema, underskjema)
     else
-      hovedskjema = BrgXml.generer_hovedskjema(regnskap)
-      underskjema = BrgXml.generer_underskjema(regnskap)
-      org = regnskap.selskap.org_nummer
-      aar = regnskap.regnskapsaar
+      submit_to_altinn(client, org, hovedskjema, underskjema)
+    end
+  end
 
-      if dry_run do
-        hoved_fil = "aarsregnskap_#{aar}_#{org}_hovedskjema.xml"
-        under_fil = "aarsregnskap_#{aar}_#{org}_underskjema.xml"
-        File.write!(hoved_fil, hovedskjema)
-        File.write!(under_fil, underskjema)
+  defp write_dry_run_files(aar, org, hovedskjema, underskjema) do
+    hoved_fil = "aarsregnskap_#{aar}_#{org}_hovedskjema.xml"
+    under_fil = "aarsregnskap_#{aar}_#{org}_underskjema.xml"
+    File.write!(hoved_fil, hovedskjema)
+    File.write!(under_fil, underskjema)
 
-        {:ok, {:dry_run, hoved_fil, under_fil}}
-      else
-        with {:ok, instans} <- AltinnClient.opprett_instans(client, "aarsregnskap", org),
-             {:ok, _} <-
-               AltinnClient.oppdater_data_element(
-                 client,
-                 "aarsregnskap",
-                 instans,
-                 "Hovedskjema",
-                 hovedskjema,
-                 "application/xml"
-               ),
-             {:ok, _} <-
-               AltinnClient.oppdater_data_element(
-                 client,
-                 "aarsregnskap",
-                 instans,
-                 "Underskjema",
-                 underskjema,
-                 "application/xml"
-               ) do
-          AltinnClient.fullfoor_instans(client, "aarsregnskap", instans)
-        end
-      end
+    {:ok, {:dry_run, hoved_fil, under_fil}}
+  end
+
+  defp submit_to_altinn(client, org, hovedskjema, underskjema) do
+    with {:ok, instans} <- AltinnClient.opprett_instans(client, "aarsregnskap", org),
+         {:ok, _} <-
+           AltinnClient.oppdater_data_element(
+             client,
+             "aarsregnskap",
+             instans,
+             "Hovedskjema",
+             hovedskjema,
+             "application/xml"
+           ),
+         {:ok, _} <-
+           AltinnClient.oppdater_data_element(
+             client,
+             "aarsregnskap",
+             instans,
+             "Underskjema",
+             underskjema,
+             "application/xml"
+           ) do
+      AltinnClient.fullfoor_instans(client, "aarsregnskap", instans)
     end
   end
 
@@ -202,66 +210,94 @@ defmodule Wenche.Aarsregnskap do
   end
 
   defp les_resultat(r) do
-    di = r["driftsinntekter"] || %{}
-    dk = r["driftskostnader"] || %{}
-    fp = r["finansposter"] || %{}
-
     %Resultatregnskap{
-      driftsinntekter: %Driftsinntekter{
-        salgsinntekter: di["salgsinntekter"] || 0,
-        andre_driftsinntekter: di["andre_driftsinntekter"] || 0
-      },
-      driftskostnader: %Driftskostnader{
-        loennskostnader: dk["loennskostnader"] || 0,
-        avskrivninger: dk["avskrivninger"] || 0,
-        andre_driftskostnader: dk["andre_driftskostnader"] || 0
-      },
-      finansposter: %Finansposter{
-        utbytte_fra_datterselskap: fp["utbytte_fra_datterselskap"] || 0,
-        andre_finansinntekter: fp["andre_finansinntekter"] || 0,
-        rentekostnader: fp["rentekostnader"] || 0,
-        andre_finanskostnader: fp["andre_finanskostnader"] || 0
-      }
+      driftsinntekter: parse_driftsinntekter(r["driftsinntekter"] || %{}),
+      driftskostnader: parse_driftskostnader(r["driftskostnader"] || %{}),
+      finansposter: parse_finansposter(r["finansposter"] || %{})
+    }
+  end
+
+  defp parse_driftsinntekter(di) do
+    %Driftsinntekter{
+      salgsinntekter: di["salgsinntekter"] || 0,
+      andre_driftsinntekter: di["andre_driftsinntekter"] || 0
+    }
+  end
+
+  defp parse_driftskostnader(dk) do
+    %Driftskostnader{
+      loennskostnader: dk["loennskostnader"] || 0,
+      avskrivninger: dk["avskrivninger"] || 0,
+      andre_driftskostnader: dk["andre_driftskostnader"] || 0
+    }
+  end
+
+  defp parse_finansposter(fp) do
+    %Finansposter{
+      utbytte_fra_datterselskap: fp["utbytte_fra_datterselskap"] || 0,
+      andre_finansinntekter: fp["andre_finansinntekter"] || 0,
+      rentekostnader: fp["rentekostnader"] || 0,
+      andre_finanskostnader: fp["andre_finanskostnader"] || 0
     }
   end
 
   defp les_balanse(b) do
-    ei = b["eiendeler"] || %{}
-    am = ei["anleggsmidler"] || %{}
-    om = ei["omloepmidler"] || %{}
-    eog = b["egenkapital_og_gjeld"] || %{}
-    ek = eog["egenkapital"] || %{}
-    lg = eog["langsiktig_gjeld"] || %{}
-    kg = eog["kortsiktig_gjeld"] || %{}
-
     %Balanse{
-      eiendeler: %Eiendeler{
-        anleggsmidler: %Anleggsmidler{
-          aksjer_i_datterselskap: am["aksjer_i_datterselskap"] || 0,
-          andre_aksjer: am["andre_aksjer"] || 0,
-          langsiktige_fordringer: am["langsiktige_fordringer"] || 0
-        },
-        omloepmidler: %Omloepmidler{
-          kortsiktige_fordringer: om["kortsiktige_fordringer"] || 0,
-          bankinnskudd: om["bankinnskudd"] || 0
-        }
-      },
-      egenkapital_og_gjeld: %EgenkapitalOgGjeld{
-        egenkapital: %Egenkapital{
-          aksjekapital: ek["aksjekapital"] || 0,
-          overkursfond: ek["overkursfond"] || 0,
-          annen_egenkapital: ek["annen_egenkapital"] || 0
-        },
-        langsiktig_gjeld: %LangsiktigGjeld{
-          laan_fra_aksjonaer: lg["laan_fra_aksjonaer"] || 0,
-          andre_langsiktige_laan: lg["andre_langsiktige_laan"] || 0
-        },
-        kortsiktig_gjeld: %KortsiktigGjeld{
-          leverandoergjeld: kg["leverandoergjeld"] || 0,
-          skyldige_offentlige_avgifter: kg["skyldige_offentlige_avgifter"] || 0,
-          annen_kortsiktig_gjeld: kg["annen_kortsiktig_gjeld"] || 0
-        }
-      }
+      eiendeler: parse_eiendeler(b["eiendeler"] || %{}),
+      egenkapital_og_gjeld: parse_egenkapital_og_gjeld(b["egenkapital_og_gjeld"] || %{})
+    }
+  end
+
+  defp parse_eiendeler(ei) do
+    %Eiendeler{
+      anleggsmidler: parse_anleggsmidler(ei["anleggsmidler"] || %{}),
+      omloepmidler: parse_omloepmidler(ei["omloepmidler"] || %{})
+    }
+  end
+
+  defp parse_anleggsmidler(am) do
+    %Anleggsmidler{
+      aksjer_i_datterselskap: am["aksjer_i_datterselskap"] || 0,
+      andre_aksjer: am["andre_aksjer"] || 0,
+      langsiktige_fordringer: am["langsiktige_fordringer"] || 0
+    }
+  end
+
+  defp parse_omloepmidler(om) do
+    %Omloepmidler{
+      kortsiktige_fordringer: om["kortsiktige_fordringer"] || 0,
+      bankinnskudd: om["bankinnskudd"] || 0
+    }
+  end
+
+  defp parse_egenkapital_og_gjeld(eog) do
+    %EgenkapitalOgGjeld{
+      egenkapital: parse_egenkapital(eog["egenkapital"] || %{}),
+      langsiktig_gjeld: parse_langsiktig_gjeld(eog["langsiktig_gjeld"] || %{}),
+      kortsiktig_gjeld: parse_kortsiktig_gjeld(eog["kortsiktig_gjeld"] || %{})
+    }
+  end
+
+  defp parse_egenkapital(ek) do
+    %Egenkapital{
+      aksjekapital: ek["aksjekapital"] || 0,
+      overkursfond: ek["overkursfond"] || 0,
+      annen_egenkapital: ek["annen_egenkapital"] || 0
+    }
+  end
+
+  defp parse_langsiktig_gjeld(lg) do
+    %LangsiktigGjeld{
+      laan_fra_aksjonaer: lg["laan_fra_aksjonaer"] || 0,
+      andre_langsiktige_laan: lg["andre_langsiktige_laan"] || 0
+    }
+  end
+
+  defp parse_kortsiktig_gjeld(kg) do
+    %KortsiktigGjeld{
+      leverandoergjeld: kg["leverandoergjeld"] || 0,
+      skyldige_offentlige_avgifter: kg["skyldige_offentlige_avgifter"] || 0,
+      annen_kortsiktig_gjeld: kg["annen_kortsiktig_gjeld"] || 0
     }
   end
 

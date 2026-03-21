@@ -114,26 +114,7 @@ defmodule Wenche.Systembruker do
         {:ok, body}
 
       {:ok, %Req.Response{status: 400, body: body}} when is_binary(body) ->
-        if String.contains?(body, "already exists") do
-          update_url = "#{url}/#{sid}"
-
-          case Req.put(update_url, json: payload, headers: headers, receive_timeout: 15_000) do
-            {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
-              if is_map(body) and map_size(body) > 0 do
-                {:ok, body}
-              else
-                {:ok, %{"id" => sid, "oppdatert" => true}}
-              end
-
-            {:ok, %Req.Response{status: status, body: body}} ->
-              {:error, {:system_update_failed, status, body}}
-
-            {:error, reason} ->
-              {:error, {:request_failed, reason}}
-          end
-        else
-          {:error, {:system_register_failed, 400, body}}
-        end
+        handle_register_conflict(body, url, sid, payload, headers)
 
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:system_register_failed, status, body}}
@@ -141,6 +122,35 @@ defmodule Wenche.Systembruker do
       {:error, reason} ->
         {:error, {:request_failed, reason}}
     end
+  end
+
+  defp handle_register_conflict(body, url, sid, payload, headers) do
+    if String.contains?(body, "already exists") do
+      update_existing_system("#{url}/#{sid}", sid, payload, headers)
+    else
+      {:error, {:system_register_failed, 400, body}}
+    end
+  end
+
+  defp update_existing_system(update_url, sid, payload, headers) do
+    case Req.put(update_url, json: payload, headers: headers, receive_timeout: 15_000) do
+      {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+        normalize_update_response(body, sid)
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:system_update_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:request_failed, reason}}
+    end
+  end
+
+  defp normalize_update_response(body, sid) when is_map(body) and map_size(body) > 0 do
+    {:ok, body}
+  end
+
+  defp normalize_update_response(_body, sid) do
+    {:ok, %{"id" => sid, "oppdatert" => true}}
   end
 
   @doc """

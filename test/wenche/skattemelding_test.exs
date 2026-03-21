@@ -146,4 +146,122 @@ defmodule Wenche.SkattemeldingTest do
       assert report =~ "fremf. underskudd"
     end
   end
+
+  describe "beregn/2" do
+    test "computes basic tax calculation without fritaksmetoden" do
+      konfig = %SkattemeldingKonfig{}
+      result = Skattemelding.beregn(sample_regnskap(), konfig)
+
+      assert result.selskap.navn == "Test AS"
+      assert result.regnskapsaar == 2025
+      assert result.rf_1167.driftsinntekter.sum == 500_000
+      assert result.rf_1167.driftskostnader.sum == 350_000
+      assert result.rf_1167.driftsresultat == 150_000
+      # driftsresultat(150k) + utbytte(0) + andre_finans(10k) - fin_kostnader(5k) = 155k
+      assert result.rf_1028.skattepliktig_inntekt_brutto == 155_000
+      assert result.rf_1028.beregnet_skatt == ceil(155_000 * 0.22)
+      assert result.rf_1028.fritaksmetoden == nil
+    end
+
+    test "applies fritaksmetoden with >=90% ownership" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 0},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 5_000},
+            finansposter: %Finansposter{utbytte_fra_datterselskap: 100_000}
+          }
+      }
+
+      konfig = %SkattemeldingKonfig{anvend_fritaksmetoden: true, eierandel_datterselskap: 100}
+      result = Skattemelding.beregn(regnskap, konfig)
+
+      assert result.rf_1028.fritaksmetoden.fritatt_utbytte == 100_000
+      assert result.rf_1028.fritaksmetoden.skattepliktig_utbytte == 0
+      assert result.rf_1028.fritaksmetoden.eierandel_over_90 == true
+    end
+
+    test "applies 3% sjablonregel with <90% ownership" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 0},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 5_000},
+            finansposter: %Finansposter{utbytte_fra_datterselskap: 100_000}
+          }
+      }
+
+      konfig = %SkattemeldingKonfig{anvend_fritaksmetoden: true, eierandel_datterselskap: 50}
+      result = Skattemelding.beregn(regnskap, konfig)
+
+      assert result.rf_1028.fritaksmetoden.skattepliktig_utbytte == 3_000
+      assert result.rf_1028.fritaksmetoden.fritatt_utbytte == 97_000
+      assert result.rf_1028.fritaksmetoden.eierandel_over_90 == false
+    end
+
+    test "applies loss carryforward deduction" do
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 100_000},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 0},
+            finansposter: %Finansposter{}
+          }
+      }
+
+      konfig = %SkattemeldingKonfig{underskudd_til_fremfoering: 40_000}
+      result = Skattemelding.beregn(regnskap, konfig)
+
+      assert result.rf_1028.fradrag_underskudd == 40_000
+      assert result.rf_1028.skattepliktig_inntekt_netto == 60_000
+      assert result.rf_1028.underskudd_til_fremfoering == 0
+    end
+
+    test "includes sammenligning when foregaaende_aar present" do
+      regnskap = %{
+        sample_regnskap()
+        | foregaaende_aar_resultat: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 400_000},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 300_000},
+            finansposter: %Finansposter{}
+          },
+          foregaaende_aar_balanse: %Balanse{
+            eiendeler: %Eiendeler{
+              anleggsmidler: %Anleggsmidler{},
+              omloepmidler: %Omloepmidler{bankinnskudd: 200_000}
+            },
+            egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+              egenkapital: %Egenkapital{aksjekapital: 100_000, annen_egenkapital: 100_000},
+              langsiktig_gjeld: %LangsiktigGjeld{},
+              kortsiktig_gjeld: %KortsiktigGjeld{}
+            }
+          }
+      }
+
+      konfig = %SkattemeldingKonfig{}
+      result = Skattemelding.beregn(regnskap, konfig)
+
+      assert result.sammenligning != nil
+      assert result.sammenligning.regnskapsaar == 2025
+      assert result.sammenligning.foregaaende_aar == 2024
+      assert result.egenkapitalnote.har_fjoraar == true
+    end
+
+    test "sammenligning is nil without foregaaende_aar" do
+      konfig = %SkattemeldingKonfig{}
+      result = Skattemelding.beregn(sample_regnskap(), konfig)
+
+      assert result.sammenligning == nil
+      assert result.egenkapitalnote.har_fjoraar == false
+    end
+
+    test "balanse section includes correct sums" do
+      konfig = %SkattemeldingKonfig{}
+      result = Skattemelding.beregn(sample_regnskap(), konfig)
+
+      assert result.balanse.eiendeler.sum == 500_000
+      assert result.balanse.egenkapital_og_gjeld.sum == 500_000
+      assert result.balanse.i_balanse == true
+    end
+  end
 end

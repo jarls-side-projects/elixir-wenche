@@ -123,7 +123,7 @@ defmodule Wenche.AarsregnskapTest do
       assert Enum.any?(errors, &(&1 =~ "Lønnskostnader > 0 men antall ansatte er 0"))
     end
 
-    test "warns when laan_fra_aksjonaer > 0 but no laan_til_naerstaaende" do
+    test "warns when laan_fra_aksjonaer > 0 but no laan_til_naerstaaende in noter" do
       regnskap = %{
         sample_regnskap()
         | balanse: %Balanse{
@@ -142,6 +142,92 @@ defmodule Wenche.AarsregnskapTest do
 
       errors = Wenche.Aarsregnskap.valider(regnskap)
       assert Enum.any?(errors, &(&1 =~ "Lån fra aksjonær"))
+    end
+  end
+
+  describe "les_config/1" do
+    test "parses a minimal config.yaml into Aarsregnskap struct" do
+      yaml = """
+      selskap:
+        navn: "Testfirma AS"
+        org_nummer: 999888777
+        daglig_leder: "Test Testesen"
+        styreleder: "Styre Styresen"
+        forretningsadresse: "Testveien 1, 0001 Oslo"
+        stiftelsesaar: 2021
+        aksjekapital: 30000
+      regnskapsaar: 2025
+      resultatregnskap:
+        driftsinntekter:
+          salgsinntekter: 100000
+          andre_driftsinntekter: 5000
+        driftskostnader:
+          loennskostnader: 50000
+          avskrivninger: 10000
+          andre_driftskostnader: 20000
+        finansposter:
+          utbytte_fra_datterselskap: 0
+          andre_finansinntekter: 1000
+          rentekostnader: 500
+          andre_finanskostnader: 200
+      balanse:
+        eiendeler:
+          anleggsmidler:
+            aksjer_i_datterselskap: 0
+            andre_aksjer: 10000
+            langsiktige_fordringer: 5000
+          omloepmidler:
+            kortsiktige_fordringer: 15000
+            bankinnskudd: 80000
+        egenkapital_og_gjeld:
+          egenkapital:
+            aksjekapital: 30000
+            overkursfond: 0
+            annen_egenkapital: 50000
+          langsiktig_gjeld:
+            laan_fra_aksjonaer: 0
+            andre_langsiktige_laan: 10000
+          kortsiktig_gjeld:
+            leverandoergjeld: 5000
+            skyldige_offentlige_avgifter: 10000
+            annen_kortsiktig_gjeld: 5000
+      noter:
+        antall_ansatte: 2
+      """
+
+      path = Path.join(System.tmp_dir!(), "test_config_#{:rand.uniform(100_000)}.yaml")
+      File.write!(path, yaml)
+
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:ok, regnskap} = Wenche.Aarsregnskap.les_config(path)
+      assert regnskap.selskap.navn == "Testfirma AS"
+      assert regnskap.selskap.org_nummer == "999888777"
+      assert regnskap.regnskapsaar == 2025
+
+      # Resultat
+      assert regnskap.resultatregnskap.driftsinntekter.salgsinntekter == 100_000
+      assert regnskap.resultatregnskap.driftsinntekter.andre_driftsinntekter == 5_000
+      assert regnskap.resultatregnskap.driftskostnader.loennskostnader == 50_000
+      assert regnskap.resultatregnskap.driftskostnader.avskrivninger == 10_000
+      assert regnskap.resultatregnskap.driftskostnader.andre_driftskostnader == 20_000
+      assert regnskap.resultatregnskap.finansposter.andre_finansinntekter == 1_000
+      assert regnskap.resultatregnskap.finansposter.rentekostnader == 500
+      assert regnskap.resultatregnskap.finansposter.andre_finanskostnader == 200
+
+      # Balanse
+      assert regnskap.balanse.eiendeler.anleggsmidler.andre_aksjer == 10_000
+      assert regnskap.balanse.eiendeler.anleggsmidler.langsiktige_fordringer == 5_000
+      assert regnskap.balanse.eiendeler.omloepmidler.kortsiktige_fordringer == 15_000
+      assert regnskap.balanse.eiendeler.omloepmidler.bankinnskudd == 80_000
+      assert regnskap.balanse.egenkapital_og_gjeld.egenkapital.aksjekapital == 30_000
+      assert regnskap.balanse.egenkapital_og_gjeld.egenkapital.annen_egenkapital == 50_000
+      assert regnskap.balanse.egenkapital_og_gjeld.langsiktig_gjeld.andre_langsiktige_laan == 10_000
+      assert regnskap.balanse.egenkapital_og_gjeld.kortsiktig_gjeld.leverandoergjeld == 5_000
+      assert regnskap.balanse.egenkapital_og_gjeld.kortsiktig_gjeld.skyldige_offentlige_avgifter == 10_000
+
+      # Noter
+      assert regnskap.noter.antall_ansatte == 2
     end
   end
 end

@@ -47,255 +47,277 @@ defmodule Wenche.Skattemelding do
     b = regnskap.balanse
     s = regnskap.selskap
     aar = regnskap.regnskapsaar
-    fr = regnskap.foregaaende_aar_resultat
-    fb = regnskap.foregaaende_aar_balanse
 
-    har_fjoraar = fr != %Resultatregnskap{} or fb != %Balanse{}
+    har_fjoraar =
+      regnskap.foregaaende_aar_resultat != %Resultatregnskap{} or
+        regnskap.foregaaende_aar_balanse != %Balanse{}
 
-    # --- RF-1167: Næringsoppgave ---
-    sum_driftsinntekter = Driftsinntekter.sum(r.driftsinntekter)
-    sum_driftskostnader = Driftskostnader.sum(r.driftskostnader)
+    rf_1028 = beregn_skattemelding(r, konfig)
+    beregnet_skatt = rf_1028.beregnet_skatt
+    aarsresultat = Resultatregnskap.resultat_foer_skatt(r) - beregnet_skatt
+
+    %{
+      selskap: %{navn: s.navn, org_nummer: s.org_nummer},
+      regnskapsaar: aar,
+      rf_1167: beregn_naeringsoppgave(r, beregnet_skatt, aarsresultat),
+      rf_1028: rf_1028,
+      balanse: beregn_balanse_oversikt(b),
+      sammenligning: beregn_sammenligning(har_fjoraar, aar, regnskap),
+      egenkapitalnote: beregn_egenkapitalnote(har_fjoraar, regnskap, aarsresultat),
+      advarsler: beregn_advarsler(b, beregnet_skatt)
+    }
+  end
+
+  defp beregn_naeringsoppgave(r, beregnet_skatt, aarsresultat) do
+    %{
+      driftsinntekter: %{
+        salgsinntekter: r.driftsinntekter.salgsinntekter,
+        andre_driftsinntekter: r.driftsinntekter.andre_driftsinntekter,
+        sum: Driftsinntekter.sum(r.driftsinntekter)
+      },
+      driftskostnader: %{
+        loennskostnader: r.driftskostnader.loennskostnader,
+        avskrivninger: r.driftskostnader.avskrivninger,
+        andre_driftskostnader: r.driftskostnader.andre_driftskostnader,
+        sum: Driftskostnader.sum(r.driftskostnader)
+      },
+      driftsresultat: Resultatregnskap.driftsresultat(r),
+      finansposter: %{
+        utbytte_fra_datterselskap: r.finansposter.utbytte_fra_datterselskap,
+        andre_finansinntekter: r.finansposter.andre_finansinntekter,
+        rentekostnader: r.finansposter.rentekostnader,
+        andre_finanskostnader: r.finansposter.andre_finanskostnader
+      },
+      resultat_foer_skatt: Resultatregnskap.resultat_foer_skatt(r),
+      skattekostnad: -beregnet_skatt,
+      aarsresultat: aarsresultat
+    }
+  end
+
+  defp beregn_skattemelding(r, konfig) do
     driftsresultat = Resultatregnskap.driftsresultat(r)
-    fin_kostnader = Finansposter.sum_kostnader(r.finansposter)
-    resultat_foer_skatt = Resultatregnskap.resultat_foer_skatt(r)
-
-    # --- RF-1028: Skatteberegning ---
     utbytte = r.finansposter.utbytte_fra_datterselskap
+    andre_finansinntekter = r.finansposter.andre_finansinntekter
+    fin_kostnader = Finansposter.sum_kostnader(r.finansposter)
 
     {skattepliktig_utbytte, fritatt_utbytte} =
-      if konfig.anvend_fritaksmetoden and utbytte > 0 do
-        if konfig.eierandel_datterselskap >= 90 do
-          {0, utbytte}
-        else
-          skattepliktig = ceil(utbytte * 0.03)
-          {skattepliktig, utbytte - skattepliktig}
-        end
-      else
-        {utbytte, 0}
-      end
-
-    andre_finansinntekter = r.finansposter.andre_finansinntekter
+      beregn_fritaksmetoden(konfig, utbytte)
 
     skattepliktig_inntekt_brutto =
       driftsresultat + skattepliktig_utbytte + andre_finansinntekter - fin_kostnader
 
-    fradrag_underskudd =
-      if skattepliktig_inntekt_brutto > 0 and konfig.underskudd_til_fremfoering > 0 do
-        min(konfig.underskudd_til_fremfoering, skattepliktig_inntekt_brutto)
+    {fradrag_underskudd, skattepliktig_inntekt_netto, nytt_underskudd, beregnet_skatt} =
+      beregn_skattepliktig_inntekt(skattepliktig_inntekt_brutto, konfig)
+
+    fritaksmetoden =
+      beregn_fritaksmetoden_detaljer(konfig, utbytte, skattepliktig_utbytte, fritatt_utbytte)
+
+    %{
+      driftsresultat: driftsresultat,
+      utbytte: utbytte,
+      fritaksmetoden: fritaksmetoden,
+      andre_finansinntekter: andre_finansinntekter,
+      finanskostnader: fin_kostnader,
+      skattepliktig_inntekt_brutto: skattepliktig_inntekt_brutto,
+      fradrag_underskudd: fradrag_underskudd,
+      skattepliktig_inntekt_netto: skattepliktig_inntekt_netto,
+      beregnet_skatt: beregnet_skatt,
+      underskudd_til_fremfoering: if(nytt_underskudd > 0, do: nytt_underskudd, else: 0)
+    }
+  end
+
+  defp beregn_fritaksmetoden(konfig, utbytte)
+       when konfig.anvend_fritaksmetoden and utbytte > 0 do
+    if konfig.eierandel_datterselskap >= 90 do
+      {0, utbytte}
+    else
+      skattepliktig = ceil(utbytte * 0.03)
+      {skattepliktig, utbytte - skattepliktig}
+    end
+  end
+
+  defp beregn_fritaksmetoden(_konfig, utbytte), do: {utbytte, 0}
+
+  defp beregn_fritaksmetoden_detaljer(konfig, utbytte, skattepliktig_utbytte, fritatt_utbytte)
+       when konfig.anvend_fritaksmetoden and utbytte > 0 do
+    %{
+      fritatt_utbytte: fritatt_utbytte,
+      skattepliktig_utbytte: skattepliktig_utbytte,
+      eierandel_over_90: konfig.eierandel_datterselskap >= 90
+    }
+  end
+
+  defp beregn_fritaksmetoden_detaljer(_konfig, _utbytte, _sp, _fr), do: nil
+
+  defp beregn_skattepliktig_inntekt(brutto, konfig) do
+    fradrag =
+      if brutto > 0 and konfig.underskudd_til_fremfoering > 0 do
+        min(konfig.underskudd_til_fremfoering, brutto)
       else
         0
       end
 
-    skattepliktig_inntekt_netto = skattepliktig_inntekt_brutto - fradrag_underskudd
+    netto = brutto - fradrag
 
     nytt_underskudd =
-      if skattepliktig_inntekt_brutto < 0 do
-        konfig.underskudd_til_fremfoering + abs(skattepliktig_inntekt_brutto)
+      if brutto < 0 do
+        konfig.underskudd_til_fremfoering + abs(brutto)
       else
-        konfig.underskudd_til_fremfoering - fradrag_underskudd
+        konfig.underskudd_til_fremfoering - fradrag
       end
 
-    beregnet_skatt =
-      if skattepliktig_inntekt_netto > 0 do
-        ceil(skattepliktig_inntekt_netto * @skattesats)
-      else
-        0
-      end
+    skatt = if netto > 0, do: ceil(netto * @skattesats), else: 0
 
-    aarsresultat = resultat_foer_skatt - beregnet_skatt
+    {fradrag, netto, nytt_underskudd, skatt}
+  end
 
-    i_balanse = Balanse.er_i_balanse?(b)
-    differanse = Balanse.differanse(b)
-
+  defp beregn_balanse_oversikt(b) do
     am = b.eiendeler.anleggsmidler
     om = b.eiendeler.omloepmidler
     ek = b.egenkapital_og_gjeld.egenkapital
     lg = b.egenkapital_og_gjeld.langsiktig_gjeld
     kg = b.egenkapital_og_gjeld.kortsiktig_gjeld
 
-    fritaksmetoden =
-      if konfig.anvend_fritaksmetoden and utbytte > 0 do
-        %{
-          fritatt_utbytte: fritatt_utbytte,
-          skattepliktig_utbytte: skattepliktig_utbytte,
-          eierandel_over_90: konfig.eierandel_datterselskap >= 90
-        }
-      else
-        nil
-      end
+    %{
+      eiendeler: %{
+        anleggsmidler: %{
+          aksjer_i_datterselskap: am.aksjer_i_datterselskap,
+          andre_aksjer: am.andre_aksjer,
+          langsiktige_fordringer: am.langsiktige_fordringer,
+          sum: Anleggsmidler.sum(am)
+        },
+        omloepmidler: %{
+          kortsiktige_fordringer: om.kortsiktige_fordringer,
+          bankinnskudd: om.bankinnskudd,
+          sum: Omloepmidler.sum(om)
+        },
+        sum: Eiendeler.sum(b.eiendeler)
+      },
+      egenkapital_og_gjeld: %{
+        egenkapital: %{
+          aksjekapital: ek.aksjekapital,
+          overkursfond: ek.overkursfond,
+          annen_egenkapital: ek.annen_egenkapital,
+          sum: Egenkapital.sum(ek)
+        },
+        langsiktig_gjeld: %{
+          laan_fra_aksjonaer: lg.laan_fra_aksjonaer,
+          andre_langsiktige_laan: lg.andre_langsiktige_laan,
+          sum: LangsiktigGjeld.sum(lg)
+        },
+        kortsiktig_gjeld: %{
+          leverandoergjeld: kg.leverandoergjeld,
+          skyldige_offentlige_avgifter: kg.skyldige_offentlige_avgifter,
+          annen_kortsiktig_gjeld: kg.annen_kortsiktig_gjeld,
+          sum: KortsiktigGjeld.sum(kg)
+        },
+        sum: EgenkapitalOgGjeld.sum(b.egenkapital_og_gjeld)
+      },
+      i_balanse: Balanse.er_i_balanse?(b),
+      differanse: Balanse.differanse(b)
+    }
+  end
 
-    sammenligning =
-      if har_fjoraar do
-        %{
-          regnskapsaar: aar,
-          foregaaende_aar: aar - 1,
-          sum_driftsinntekter: %{
-            aar: Driftsinntekter.sum(r.driftsinntekter),
-            fjoraar: Driftsinntekter.sum(fr.driftsinntekter)
-          },
-          sum_driftskostnader: %{
-            aar: Driftskostnader.sum(r.driftskostnader),
-            fjoraar: Driftskostnader.sum(fr.driftskostnader)
-          },
-          driftsresultat: %{
-            aar: Resultatregnskap.driftsresultat(r),
-            fjoraar: Resultatregnskap.driftsresultat(fr)
-          },
-          netto_finansposter: %{
-            aar:
-              Finansposter.sum_inntekter(r.finansposter) -
-                Finansposter.sum_kostnader(r.finansposter),
-            fjoraar:
-              Finansposter.sum_inntekter(fr.finansposter) -
-                Finansposter.sum_kostnader(fr.finansposter)
-          },
-          resultat_foer_skatt: %{
-            aar: Resultatregnskap.resultat_foer_skatt(r),
-            fjoraar: Resultatregnskap.resultat_foer_skatt(fr)
-          },
-          sum_eiendeler: %{
-            aar: Eiendeler.sum(b.eiendeler),
-            fjoraar: Eiendeler.sum(fb.eiendeler)
-          },
-          sum_egenkapital_og_gjeld: %{
-            aar: EgenkapitalOgGjeld.sum(b.egenkapital_og_gjeld),
-            fjoraar: EgenkapitalOgGjeld.sum(fb.egenkapital_og_gjeld)
-          }
-        }
-      else
-        nil
-      end
+  defp beregn_sammenligning(false, _aar, _regnskap), do: nil
 
-    ek_ub = b.egenkapital_og_gjeld.egenkapital
-
-    egenkapitalnote =
-      if har_fjoraar do
-        ek_ib = fb.egenkapital_og_gjeld.egenkapital
-        forklart_aek = ek_ib.annen_egenkapital + aarsresultat - regnskap.utbytte_utbetalt
-        andre_aek = ek_ub.annen_egenkapital - forklart_aek
-
-        %{
-          har_fjoraar: true,
-          ek_ib: %{
-            aksjekapital: ek_ib.aksjekapital,
-            overkursfond: ek_ib.overkursfond,
-            annen_egenkapital: ek_ib.annen_egenkapital
-          },
-          ek_ub: %{
-            aksjekapital: ek_ub.aksjekapital,
-            overkursfond: ek_ub.overkursfond,
-            annen_egenkapital: ek_ub.annen_egenkapital
-          },
-          aarsresultat: aarsresultat,
-          utbytte_utbetalt: regnskap.utbytte_utbetalt,
-          andre_endringer: %{
-            aksjekapital: ek_ub.aksjekapital - ek_ib.aksjekapital,
-            overkursfond: ek_ub.overkursfond - ek_ib.overkursfond,
-            annen_egenkapital: andre_aek
-          }
-        }
-      else
-        %{
-          har_fjoraar: false,
-          ek_ub: %{
-            aksjekapital: ek_ub.aksjekapital,
-            overkursfond: ek_ub.overkursfond,
-            annen_egenkapital: ek_ub.annen_egenkapital
-          }
-        }
-      end
-
-    advarsler =
-      []
-      |> maybe_add_advarsel(
-        not i_balanse,
-        "Balansen stemmer ikke! Differanse: #{differanse} kr"
-      )
-      |> maybe_add_advarsel(
-        beregnet_skatt > 0,
-        "Beregnet skatt er #{beregnet_skatt} kr. Husk å føre dette som «Skyldig skatt» (konto 2500) under kortsiktig gjeld i balansen, og kontroller at balansen fortsatt går opp."
-      )
+  defp beregn_sammenligning(true, aar, regnskap) do
+    r = regnskap.resultatregnskap
+    fr = regnskap.foregaaende_aar_resultat
+    b = regnskap.balanse
+    fb = regnskap.foregaaende_aar_balanse
 
     %{
-      selskap: %{navn: s.navn, org_nummer: s.org_nummer},
       regnskapsaar: aar,
-      rf_1167: %{
-        driftsinntekter: %{
-          salgsinntekter: r.driftsinntekter.salgsinntekter,
-          andre_driftsinntekter: r.driftsinntekter.andre_driftsinntekter,
-          sum: sum_driftsinntekter
-        },
-        driftskostnader: %{
-          loennskostnader: r.driftskostnader.loennskostnader,
-          avskrivninger: r.driftskostnader.avskrivninger,
-          andre_driftskostnader: r.driftskostnader.andre_driftskostnader,
-          sum: sum_driftskostnader
-        },
-        driftsresultat: driftsresultat,
-        finansposter: %{
-          utbytte_fra_datterselskap: utbytte,
-          andre_finansinntekter: andre_finansinntekter,
-          rentekostnader: r.finansposter.rentekostnader,
-          andre_finanskostnader: r.finansposter.andre_finanskostnader
-        },
-        resultat_foer_skatt: resultat_foer_skatt,
-        skattekostnad: -beregnet_skatt,
-        aarsresultat: aarsresultat
+      foregaaende_aar: aar - 1,
+      sum_driftsinntekter: %{
+        aar: Driftsinntekter.sum(r.driftsinntekter),
+        fjoraar: Driftsinntekter.sum(fr.driftsinntekter)
       },
-      rf_1028: %{
-        driftsresultat: driftsresultat,
-        utbytte: utbytte,
-        fritaksmetoden: fritaksmetoden,
-        andre_finansinntekter: andre_finansinntekter,
-        finanskostnader: fin_kostnader,
-        skattepliktig_inntekt_brutto: skattepliktig_inntekt_brutto,
-        fradrag_underskudd: fradrag_underskudd,
-        skattepliktig_inntekt_netto: skattepliktig_inntekt_netto,
-        beregnet_skatt: beregnet_skatt,
-        underskudd_til_fremfoering: if(nytt_underskudd > 0, do: nytt_underskudd, else: 0)
+      sum_driftskostnader: %{
+        aar: Driftskostnader.sum(r.driftskostnader),
+        fjoraar: Driftskostnader.sum(fr.driftskostnader)
       },
-      balanse: %{
-        eiendeler: %{
-          anleggsmidler: %{
-            aksjer_i_datterselskap: am.aksjer_i_datterselskap,
-            andre_aksjer: am.andre_aksjer,
-            langsiktige_fordringer: am.langsiktige_fordringer,
-            sum: Anleggsmidler.sum(am)
-          },
-          omloepmidler: %{
-            kortsiktige_fordringer: om.kortsiktige_fordringer,
-            bankinnskudd: om.bankinnskudd,
-            sum: Omloepmidler.sum(om)
-          },
-          sum: Eiendeler.sum(b.eiendeler)
-        },
-        egenkapital_og_gjeld: %{
-          egenkapital: %{
-            aksjekapital: ek.aksjekapital,
-            overkursfond: ek.overkursfond,
-            annen_egenkapital: ek.annen_egenkapital,
-            sum: Egenkapital.sum(ek)
-          },
-          langsiktig_gjeld: %{
-            laan_fra_aksjonaer: lg.laan_fra_aksjonaer,
-            andre_langsiktige_laan: lg.andre_langsiktige_laan,
-            sum: LangsiktigGjeld.sum(lg)
-          },
-          kortsiktig_gjeld: %{
-            leverandoergjeld: kg.leverandoergjeld,
-            skyldige_offentlige_avgifter: kg.skyldige_offentlige_avgifter,
-            annen_kortsiktig_gjeld: kg.annen_kortsiktig_gjeld,
-            sum: KortsiktigGjeld.sum(kg)
-          },
-          sum: EgenkapitalOgGjeld.sum(b.egenkapital_og_gjeld)
-        },
-        i_balanse: i_balanse,
-        differanse: differanse
+      driftsresultat: %{
+        aar: Resultatregnskap.driftsresultat(r),
+        fjoraar: Resultatregnskap.driftsresultat(fr)
       },
-      sammenligning: sammenligning,
-      egenkapitalnote: egenkapitalnote,
-      advarsler: advarsler
+      netto_finansposter: %{
+        aar:
+          Finansposter.sum_inntekter(r.finansposter) -
+            Finansposter.sum_kostnader(r.finansposter),
+        fjoraar:
+          Finansposter.sum_inntekter(fr.finansposter) -
+            Finansposter.sum_kostnader(fr.finansposter)
+      },
+      resultat_foer_skatt: %{
+        aar: Resultatregnskap.resultat_foer_skatt(r),
+        fjoraar: Resultatregnskap.resultat_foer_skatt(fr)
+      },
+      sum_eiendeler: %{
+        aar: Eiendeler.sum(b.eiendeler),
+        fjoraar: Eiendeler.sum(fb.eiendeler)
+      },
+      sum_egenkapital_og_gjeld: %{
+        aar: EgenkapitalOgGjeld.sum(b.egenkapital_og_gjeld),
+        fjoraar: EgenkapitalOgGjeld.sum(fb.egenkapital_og_gjeld)
+      }
     }
+  end
+
+  defp beregn_egenkapitalnote(false, regnskap, _aarsresultat) do
+    ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
+
+    %{
+      har_fjoraar: false,
+      ek_ub: %{
+        aksjekapital: ek_ub.aksjekapital,
+        overkursfond: ek_ub.overkursfond,
+        annen_egenkapital: ek_ub.annen_egenkapital
+      }
+    }
+  end
+
+  defp beregn_egenkapitalnote(true, regnskap, aarsresultat) do
+    ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
+    ek_ib = regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital
+    forklart_aek = ek_ib.annen_egenkapital + aarsresultat - regnskap.utbytte_utbetalt
+    andre_aek = ek_ub.annen_egenkapital - forklart_aek
+
+    %{
+      har_fjoraar: true,
+      ek_ib: %{
+        aksjekapital: ek_ib.aksjekapital,
+        overkursfond: ek_ib.overkursfond,
+        annen_egenkapital: ek_ib.annen_egenkapital
+      },
+      ek_ub: %{
+        aksjekapital: ek_ub.aksjekapital,
+        overkursfond: ek_ub.overkursfond,
+        annen_egenkapital: ek_ub.annen_egenkapital
+      },
+      aarsresultat: aarsresultat,
+      utbytte_utbetalt: regnskap.utbytte_utbetalt,
+      andre_endringer: %{
+        aksjekapital: ek_ub.aksjekapital - ek_ib.aksjekapital,
+        overkursfond: ek_ub.overkursfond - ek_ib.overkursfond,
+        annen_egenkapital: andre_aek
+      }
+    }
+  end
+
+  defp beregn_advarsler(b, beregnet_skatt) do
+    i_balanse = Balanse.er_i_balanse?(b)
+    differanse = Balanse.differanse(b)
+
+    []
+    |> maybe_add_advarsel(
+      not i_balanse,
+      "Balansen stemmer ikke! Differanse: #{differanse} kr"
+    )
+    |> maybe_add_advarsel(
+      beregnet_skatt > 0,
+      "Beregnet skatt er #{beregnet_skatt} kr. Husk å føre dette som «Skyldig skatt» (konto 2500) under kortsiktig gjeld i balansen, og kontroller at balansen fortsatt går opp."
+    )
   end
 
   defp maybe_add_advarsel(list, true, msg), do: list ++ [msg]
