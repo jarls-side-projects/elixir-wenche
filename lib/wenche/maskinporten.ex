@@ -55,9 +55,8 @@ defmodule Wenche.Maskinporten do
   """
   def get_altinn_token(config, scope \\ @scopes) do
     with {:ok, jwt} <- build_jwt_grant(config, scope),
-         {:ok, maskinporten_token} <- exchange_jwt(config, jwt),
-         {:ok, altinn_token} <- exchange_for_altinn_token(config, maskinporten_token) do
-      {:ok, altinn_token}
+         {:ok, maskinporten_token} <- exchange_jwt(config, jwt) do
+      exchange_for_altinn_token(config, maskinporten_token)
     end
   end
 
@@ -70,9 +69,8 @@ defmodule Wenche.Maskinporten do
   """
   def get_systemuser_token(config, org_nummer) do
     with {:ok, jwt} <- build_jwt_grant(config, @scopes, org_nummer: org_nummer),
-         {:ok, maskinporten_token} <- exchange_jwt(config, jwt),
-         {:ok, altinn_token} <- exchange_for_altinn_token(config, maskinporten_token) do
-      {:ok, altinn_token}
+         {:ok, maskinporten_token} <- exchange_jwt(config, jwt) do
+      exchange_for_altinn_token(config, maskinporten_token)
     end
   end
 
@@ -85,9 +83,8 @@ defmodule Wenche.Maskinporten do
   Returns `{:ok, maskinporten_token}` or `{:error, reason}`.
   """
   def get_admin_token(config) do
-    with {:ok, jwt} <- build_jwt_grant(config, @admin_scopes),
-         {:ok, maskinporten_token} <- exchange_jwt(config, jwt) do
-      {:ok, maskinporten_token}
+    with {:ok, jwt} <- build_jwt_grant(config, @admin_scopes) do
+      exchange_jwt(config, jwt)
     end
   end
 
@@ -206,9 +203,8 @@ defmodule Wenche.Maskinporten do
   Returns `{:ok, maskinporten_token}` or `{:error, reason}`.
   """
   def get_skd_aksjonaer_token(config, org_nummer) do
-    with {:ok, jwt} <- build_jwt_grant(config, @skd_aksjonaer_scope, org_nummer: org_nummer),
-         {:ok, maskinporten_token} <- exchange_jwt(config, jwt) do
-      {:ok, maskinporten_token}
+    with {:ok, jwt} <- build_jwt_grant(config, @skd_aksjonaer_scope, org_nummer: org_nummer) do
+      exchange_jwt(config, jwt)
     end
   end
 

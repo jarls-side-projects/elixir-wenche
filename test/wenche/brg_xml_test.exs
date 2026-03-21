@@ -5,19 +5,19 @@ defmodule Wenche.BrgXmlTest do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    Selskap,
-    Resultatregnskap,
+    Anleggsmidler,
     Balanse,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
-    EgenkapitalOgGjeld,
     Egenkapital,
+    EgenkapitalOgGjeld,
+    Eiendeler,
+    Finansposter,
+    KortsiktigGjeld,
     LangsiktigGjeld,
-    KortsiktigGjeld
+    Omloepmidler,
+    Resultatregnskap,
+    Selskap
   }
 
   def sample_regnskap do

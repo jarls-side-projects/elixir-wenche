@@ -9,8 +9,8 @@ defmodule Wenche.Noter do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    Resultatregnskap,
-    Egenkapital
+    Egenkapital,
+    Resultatregnskap
   }
 
   # ---------------------------------------------------------------------------
@@ -125,9 +125,7 @@ defmodule Wenche.Noter do
 
     har_fjoraar = length(rows) > 1
 
-    if not har_fjoraar do
-      ""
-    else
+    if har_fjoraar do
       ek_ib = regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital
       ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
       aarsresultat = Resultatregnskap.aarsresultat(regnskap.resultatregnskap)
@@ -169,6 +167,8 @@ defmodule Wenche.Noter do
             </egenkapitalAvslutningsbalanse>
           </noteEgenkapital>
       """
+    else
+      ""
     end
   end
 

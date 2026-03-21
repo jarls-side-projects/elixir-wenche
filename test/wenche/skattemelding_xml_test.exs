@@ -5,19 +5,19 @@ defmodule Wenche.SkattemeldingXmlTest do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    Selskap,
-    Resultatregnskap,
+    Anleggsmidler,
     Balanse,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
-    EgenkapitalOgGjeld,
     Egenkapital,
-    LangsiktigGjeld,
+    EgenkapitalOgGjeld,
+    Eiendeler,
+    Finansposter,
     KortsiktigGjeld,
+    LangsiktigGjeld,
+    Omloepmidler,
+    Resultatregnskap,
+    Selskap,
     SkattemeldingKonfig
   }
 

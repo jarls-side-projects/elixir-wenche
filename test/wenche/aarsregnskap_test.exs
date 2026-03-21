@@ -5,20 +5,20 @@ defmodule Wenche.AarsregnskapTest do
 
   alias Wenche.Models.{
     Aarsregnskap,
-    Selskap,
-    Resultatregnskap,
+    Anleggsmidler,
     Balanse,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
-    EgenkapitalOgGjeld,
     Egenkapital,
-    LangsiktigGjeld,
+    EgenkapitalOgGjeld,
+    Eiendeler,
+    Finansposter,
     KortsiktigGjeld,
-    Noter
+    LangsiktigGjeld,
+    Noter,
+    Omloepmidler,
+    Resultatregnskap,
+    Selskap
   }
 
   def sample_selskap do

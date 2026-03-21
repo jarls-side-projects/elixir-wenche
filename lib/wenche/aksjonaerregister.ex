@@ -13,7 +13,7 @@ defmodule Wenche.Aksjonaerregister do
     3. POST bekreft                  — confirm all sub-forms submitted
   """
 
-  alias Wenche.Models.{Aksjonaerregisteroppgave, Aksjonaer}
+  alias Wenche.Models.{Aksjonaer, Aksjonaerregisteroppgave}
 
   @doc """
   Generates RF-1086 Hovedskjema XML for SKD's API.

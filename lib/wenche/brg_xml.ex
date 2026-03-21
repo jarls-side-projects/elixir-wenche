@@ -14,16 +14,16 @@ defmodule Wenche.BrgXml do
 
   alias Wenche.Models.{
     Aarsregnskap,
+    Anleggsmidler,
     Driftsinntekter,
     Driftskostnader,
-    Finansposter,
-    Resultatregnskap,
-    Eiendeler,
-    Anleggsmidler,
-    Omloepmidler,
     Egenkapital,
+    Eiendeler,
+    Finansposter,
+    KortsiktigGjeld,
     LangsiktigGjeld,
-    KortsiktigGjeld
+    Omloepmidler,
+    Resultatregnskap
   }
 
   @doc """
