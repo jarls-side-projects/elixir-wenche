@@ -201,18 +201,30 @@ defmodule Wenche.NoterTest do
 
     test "includes negative laan note when no loans" do
       notes = Wenche.Noter.generer_noter_tekst(sample_regnskap())
-      {_, content} = Enum.find(notes, fn {t, _} -> t == "Lån og sikkerhetsstillelse til nærstående" end)
+
+      {_, content} =
+        Enum.find(notes, fn {t, _} -> t == "Lån og sikkerhetsstillelse til nærstående" end)
+
       assert content =~ "ikke gitt lån"
     end
 
     test "includes laan details when loans exist" do
       noter = %Noter{
         laan_til_naerstaaende: [
-          %LaanTilNaerstaaende{navn: "Ola Nordmann", rolle: "aksjonær", beloep: 100_000, rentesats: 3.0}
+          %LaanTilNaerstaaende{
+            navn: "Ola Nordmann",
+            rolle: "aksjonær",
+            beloep: 100_000,
+            rentesats: 3.0
+          }
         ]
       }
+
       notes = Wenche.Noter.generer_noter_tekst(sample_regnskap(noter: noter))
-      {_, content} = Enum.find(notes, fn {t, _} -> t == "Lån og sikkerhetsstillelse til nærstående" end)
+
+      {_, content} =
+        Enum.find(notes, fn {t, _} -> t == "Lån og sikkerhetsstillelse til nærstående" end)
+
       assert content =~ "Ola Nordmann"
       assert content =~ "aksjonær"
       assert content =~ "100 000"
@@ -224,6 +236,7 @@ defmodule Wenche.NoterTest do
         fortsatt_drift_usikkerhet: true,
         fortsatt_drift_beskrivelse: "Selskapet har negativt driftsresultat."
       }
+
       notes = Wenche.Noter.generer_noter_tekst(sample_regnskap(noter: noter))
       {_, content} = Enum.find(notes, fn {t, _} -> t == "Fortsatt drift" end)
       assert content =~ "negativt driftsresultat"

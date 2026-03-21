@@ -32,6 +32,8 @@ defmodule Wenche.Skattemelding do
     KortsiktigGjeld
   }
 
+  alias Wenche.{AltinnClient, SkattemeldingXml, SkdSkattemeldingClient}
+
   @skattesats 0.22
 
   @doc """
@@ -434,4 +436,94 @@ defmodule Wenche.Skattemelding do
 
   defp pad_left(str, width), do: String.pad_leading(to_string(str), width)
   defp pad_right(str, width), do: String.pad_trailing(to_string(str), width)
+
+  # ── Submission ──────────────────────────────────────────────────────
+
+  @doc """
+  Submits the tax return to Skatteetaten via Altinn 3.
+
+  Generates XML documents from the given `Aarsregnskap` and `SkattemeldingKonfig`,
+  then submits via the Altinn 3 skattemelding app.
+
+  ## Options
+
+  - `:dry_run` — if true, writes XML files locally without submitting (default: false)
+  - `:dokumentidentifikator` — reference to draft (from `hent_utkast`)
+
+  Returns `{:ok, inbox_url}` or `{:ok, {:dry_run, files}}` or `{:error, reason}`.
+  """
+  def send_inn(
+        %Aarsregnskap{} = regnskap,
+        %SkattemeldingKonfig{} = konfig,
+        %AltinnClient{} = client,
+        opts \\ []
+      ) do
+    dry_run = Keyword.get(opts, :dry_run, false)
+    org = regnskap.selskap.org_nummer
+    aar = regnskap.regnskapsaar
+
+    skattemelding_xml = SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig)
+    naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap)
+
+    request_xml =
+      SkattemeldingXml.generer_request_xml(
+        skattemelding_xml,
+        naering_xml,
+        Keyword.take(opts, [:dokumentidentifikator]) ++ [inntektsaar: aar]
+      )
+
+    if dry_run do
+      skattemelding_fil = "skattemelding_#{aar}_#{org}_skattemelding.xml"
+      naering_fil = "skattemelding_#{aar}_#{org}_naeringsspesifikasjon.xml"
+      request_fil = "skattemelding_#{aar}_#{org}_request.xml"
+      File.write!(skattemelding_fil, skattemelding_xml)
+      File.write!(naering_fil, naering_xml)
+      File.write!(request_fil, request_xml)
+
+      {:ok, {:dry_run, skattemelding_fil, naering_fil, request_fil}}
+    else
+      with {:ok, instans} <- AltinnClient.opprett_instans(client, "skattemelding", org),
+           {:ok, _} <-
+             AltinnClient.oppdater_data_element(
+               client,
+               "skattemelding",
+               instans,
+               "skattemelding",
+               request_xml,
+               "application/xml"
+             ),
+           {:ok, inbox_url} <- AltinnClient.fullfoor_instans(client, "skattemelding", instans) do
+        {:ok, inbox_url}
+      end
+    end
+  end
+
+  @doc """
+  Validates the tax return against Skatteetaten's validation API.
+
+  Generates XML documents and sends them to the validation endpoint.
+
+  Returns `{:ok, validation_result}` or `{:error, reason}`.
+  """
+  def valider(
+        %Aarsregnskap{} = regnskap,
+        %SkattemeldingKonfig{} = konfig,
+        %SkdSkattemeldingClient{} = skd_client,
+        opts \\ []
+      ) do
+    aar = regnskap.regnskapsaar
+    org = regnskap.selskap.org_nummer
+
+    skattemelding_xml = SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig)
+    naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap)
+
+    request_xml =
+      SkattemeldingXml.generer_request_xml(
+        skattemelding_xml,
+        naering_xml,
+        Keyword.take(opts, [:dokumentidentifikator]) ++ [inntektsaar: aar]
+      )
+
+    SkdSkattemeldingClient.valider(skd_client, aar, org, request_xml)
+  end
 end

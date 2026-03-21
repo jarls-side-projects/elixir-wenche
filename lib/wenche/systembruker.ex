@@ -46,6 +46,14 @@ defmodule Wenche.Systembruker do
           "value" => "ske-innrapportering-aksjonaerregisteroppgave"
         }
       ]
+    },
+    %{
+      "resource" => [
+        %{
+          "id" => "urn:altinn:resource",
+          "value" => "app_skd_formueinntekt-skattemelding-v2"
+        }
+      ]
     }
   ]
 

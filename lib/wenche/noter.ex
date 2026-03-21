@@ -42,8 +42,9 @@ defmodule Wenche.Noter do
     ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
     aarsresultat = Resultatregnskap.aarsresultat(regnskap.resultatregnskap)
 
-    har_fjoraar = regnskap.foregaaende_aar_balanse != nil and
-      regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital.aksjekapital != 0
+    har_fjoraar =
+      regnskap.foregaaende_aar_balanse != nil and
+        regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital.aksjekapital != 0
 
     if har_fjoraar do
       ek_ib = regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital
@@ -53,25 +54,38 @@ defmodule Wenche.Noter do
       andre_aek = ek_ub.annen_egenkapital - forklart_aek
 
       lines = [
-        ek_rad("EK 01.01.#{aar}", ek_ib.aksjekapital, ek_ib.overkursfond, ek_ib.annen_egenkapital),
+        ek_rad(
+          "EK 01.01.#{aar}",
+          ek_ib.aksjekapital,
+          ek_ib.overkursfond,
+          ek_ib.annen_egenkapital
+        ),
         ek_rad("Årsresultat", 0, 0, aarsresultat)
       ]
 
-      lines = if regnskap.utbytte_utbetalt != 0 do
-        lines ++ [ek_rad("Utbytte utbetalt", 0, 0, -regnskap.utbytte_utbetalt)]
-      else
-        lines
-      end
+      lines =
+        if regnskap.utbytte_utbetalt != 0 do
+          lines ++ [ek_rad("Utbytte utbetalt", 0, 0, -regnskap.utbytte_utbetalt)]
+        else
+          lines
+        end
 
-      lines = if delta_ak != 0 or delta_ok != 0 or andre_aek != 0 do
-        lines ++ [ek_rad("Andre endringer", delta_ak, delta_ok, andre_aek)]
-      else
-        lines
-      end
+      lines =
+        if delta_ak != 0 or delta_ok != 0 or andre_aek != 0 do
+          lines ++ [ek_rad("Andre endringer", delta_ak, delta_ok, andre_aek)]
+        else
+          lines
+        end
 
-      lines ++ [
-        ek_rad("EK 31.12.#{aar}", ek_ub.aksjekapital, ek_ub.overkursfond, ek_ub.annen_egenkapital)
-      ]
+      lines ++
+        [
+          ek_rad(
+            "EK 31.12.#{aar}",
+            ek_ub.aksjekapital,
+            ek_ub.overkursfond,
+            ek_ub.annen_egenkapital
+          )
+        ]
     else
       [
         ek_rad("EK 31.12.#{aar}", ek_ub.aksjekapital, ek_ub.overkursfond, ek_ub.annen_egenkapital)
@@ -118,18 +132,19 @@ defmodule Wenche.Noter do
       ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
       aarsresultat = Resultatregnskap.aarsresultat(regnskap.resultatregnskap)
 
-      utbytte_xml = if regnskap.utbytte_utbetalt != 0 do
-        """
-              <utbyttePaaVedtatt>
-                <aksjekapitalSelskapskapital orid="37515">0</aksjekapitalSelskapskapital>
-                <overkursfond orid="37516">0</overkursfond>
-                <annenEgenkapital orid="37517">#{-regnskap.utbytte_utbetalt}</annenEgenkapital>
-                <sumEgenkapital orid="37518">#{-regnskap.utbytte_utbetalt}</sumEgenkapital>
-              </utbyttePaaVedtatt>
-        """
-      else
-        ""
-      end
+      utbytte_xml =
+        if regnskap.utbytte_utbetalt != 0 do
+          """
+                <utbyttePaaVedtatt>
+                  <aksjekapitalSelskapskapital orid="37515">0</aksjekapitalSelskapskapital>
+                  <overkursfond orid="37516">0</overkursfond>
+                  <annenEgenkapital orid="37517">#{-regnskap.utbytte_utbetalt}</annenEgenkapital>
+                  <sumEgenkapital orid="37518">#{-regnskap.utbytte_utbetalt}</sumEgenkapital>
+                </utbyttePaaVedtatt>
+          """
+        else
+          ""
+        end
 
       """
           <noteEgenkapital>
@@ -176,7 +191,12 @@ defmodule Wenche.Noter do
     notes = notes ++ [{"Regnskapsprinsipper", prinsipper}]
 
     # §7-43 Antall ansatte
-    notes = notes ++ [{"Antall ansatte", "Gjennomsnittlig antall ansatte i regnskapsåret: #{noter.antall_ansatte}."}]
+    notes =
+      notes ++
+        [
+          {"Antall ansatte",
+           "Gjennomsnittlig antall ansatte i regnskapsåret: #{noter.antall_ansatte}."}
+        ]
 
     # Egenkapital note
     ek_rows = egenkapital_note(regnskap)
@@ -189,12 +209,16 @@ defmodule Wenche.Noter do
 
     # §7-36 Konsern (if datterselskap)
     am = regnskap.balanse.eiendeler.anleggsmidler
-    notes = if am.aksjer_i_datterselskap > 0 do
-      konsern_text = "Selskapet har investering i datterselskap bokført til #{format_nok(am.aksjer_i_datterselskap)}."
-      notes ++ [{"Konsern og tilknyttet selskap", konsern_text}]
-    else
-      notes
-    end
+
+    notes =
+      if am.aksjer_i_datterselskap > 0 do
+        konsern_text =
+          "Selskapet har investering i datterselskap bokført til #{format_nok(am.aksjer_i_datterselskap)}."
+
+        notes ++ [{"Konsern og tilknyttet selskap", konsern_text}]
+      else
+        notes
+      end
 
     notes
     |> maybe_add_laan_note(noter)
@@ -202,14 +226,19 @@ defmodule Wenche.Noter do
   end
 
   defp maybe_add_laan_note(notes, %{laan_til_naerstaaende: []}) do
-    notes ++ [{"Lån og sikkerhetsstillelse til nærstående", "Det er ikke gitt lån eller stilt sikkerhet til fordel for nærstående parter."}]
+    notes ++
+      [
+        {"Lån og sikkerhetsstillelse til nærstående",
+         "Det er ikke gitt lån eller stilt sikkerhet til fordel for nærstående parter."}
+      ]
   end
 
   defp maybe_add_laan_note(notes, %{laan_til_naerstaaende: laan}) do
-    lines = Enum.map(laan, fn l ->
-      rente = if l.rentesats, do: " (rente: #{l.rentesats}%)", else: ""
-      "#{l.navn} (#{l.rolle}): #{format_nok(l.beloep)}#{rente}"
-    end)
+    lines =
+      Enum.map(laan, fn l ->
+        rente = if l.rentesats, do: " (rente: #{l.rentesats}%)", else: ""
+        "#{l.navn} (#{l.rolle}): #{format_nok(l.beloep)}#{rente}"
+      end)
 
     tekst = "Følgende lån er gitt til nærstående:\n" <> Enum.join(lines, "\n")
     notes ++ [{"Lån og sikkerhetsstillelse til nærstående", tekst}]
@@ -218,16 +247,20 @@ defmodule Wenche.Noter do
   defp maybe_add_fortsatt_drift_note(notes, %{fortsatt_drift_usikkerhet: false}), do: notes
 
   defp maybe_add_fortsatt_drift_note(notes, %{fortsatt_drift_usikkerhet: true} = noter) do
-    tekst = noter.fortsatt_drift_beskrivelse || "Det foreligger usikkerhet knyttet til fortsatt drift."
+    tekst =
+      noter.fortsatt_drift_beskrivelse || "Det foreligger usikkerhet knyttet til fortsatt drift."
+
     notes ++ [{"Fortsatt drift", tekst}]
   end
 
   defp format_egenkapital_text(rows) do
-    header = "#{pad("", 20)}#{pad("Aksjekapital", 14)}#{pad("Overkursfond", 14)}#{pad("Annen EK", 14)}#{pad("Sum", 14)}"
+    header =
+      "#{pad("", 20)}#{pad("Aksjekapital", 14)}#{pad("Overkursfond", 14)}#{pad("Annen EK", 14)}#{pad("Sum", 14)}"
 
-    body = Enum.map(rows, fn {label, ak, ok, aek, sum} ->
-      "#{pad(label, 20)}#{pad(format_nok(ak), 14)}#{pad(format_nok(ok), 14)}#{pad(format_nok(aek), 14)}#{pad(format_nok(sum), 14)}"
-    end)
+    body =
+      Enum.map(rows, fn {label, ak, ok, aek, sum} ->
+        "#{pad(label, 20)}#{pad(format_nok(ak), 14)}#{pad(format_nok(ok), 14)}#{pad(format_nok(aek), 14)}#{pad(format_nok(sum), 14)}"
+      end)
 
     Enum.join([header | body], "\n") <> "\n(beløp i hele kroner, NOK)"
   end

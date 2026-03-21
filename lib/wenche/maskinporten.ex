@@ -42,6 +42,9 @@ defmodule Wenche.Maskinporten do
   # Scope for aksjonærregisteroppgave submission directly to SKD's API
   @skd_aksjonaer_scope "skatteetaten:innrapporteringaksjonaerregisteroppgave"
 
+  # Scope for skattemeldingen (tax return) submission
+  @skattemelding_scope "skatteetaten:formueinntekt/skattemelding"
+
   @doc """
   Obtains an Altinn platform token by:
   1. Building a JWT grant assertion
@@ -223,4 +226,9 @@ defmodule Wenche.Maskinporten do
   Returns the SKD aksjonærregister scope.
   """
   def skd_aksjonaer_scope, do: @skd_aksjonaer_scope
+
+  @doc """
+  Returns the skattemeldingen scope.
+  """
+  def skattemelding_scope, do: @skattemelding_scope
 end

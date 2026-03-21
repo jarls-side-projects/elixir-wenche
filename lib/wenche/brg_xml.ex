@@ -323,7 +323,7 @@ defmodule Wenche.BrgXml do
           </balanseGjeldOversikt>
         </balanseEgenkapitalGjeld>
 
-#{Wenche.Noter.generer_noter_xml(regnskap)}
+    #{Wenche.Noter.generer_noter_xml(regnskap)}
 
       </Skjemainnhold-RR0002U>
     </melding>

@@ -72,7 +72,8 @@ defmodule Wenche.Aarsregnskap do
     noter = regnskap.noter
 
     errors =
-      if noter.antall_ansatte == 0 and regnskap.resultatregnskap.driftskostnader.loennskostnader > 0 do
+      if noter.antall_ansatte == 0 and
+           regnskap.resultatregnskap.driftskostnader.loennskostnader > 0 do
         ["Advarsel: Lønnskostnader > 0 men antall ansatte er 0 i noter." | errors]
       else
         errors
@@ -81,7 +82,10 @@ defmodule Wenche.Aarsregnskap do
     errors =
       if regnskap.balanse.egenkapital_og_gjeld.langsiktig_gjeld.laan_fra_aksjonaer > 0 and
            noter.laan_til_naerstaaende == [] do
-        ["Advarsel: Lån fra aksjonær i balansen men ingen lån til nærstående i noter (§7-45)." | errors]
+        [
+          "Advarsel: Lån fra aksjonær i balansen men ingen lån til nærstående i noter (§7-45)."
+          | errors
+        ]
       else
         errors
       end
@@ -263,16 +267,17 @@ defmodule Wenche.Aarsregnskap do
   end
 
   defp les_noter(n) do
-    laan = (n["laan_til_naerstaaende"] || [])
-    |> Enum.map(fn l ->
-      %LaanTilNaerstaaende{
-        navn: l["navn"],
-        rolle: l["rolle"],
-        beloep: l["beloep"] || 0,
-        rentesats: l["rentesats"],
-        avdragsplan: l["avdragsplan"]
-      }
-    end)
+    laan =
+      (n["laan_til_naerstaaende"] || [])
+      |> Enum.map(fn l ->
+        %LaanTilNaerstaaende{
+          navn: l["navn"],
+          rolle: l["rolle"],
+          beloep: l["beloep"] || 0,
+          rentesats: l["rentesats"],
+          avdragsplan: l["avdragsplan"]
+        }
+      end)
 
     %Noter{
       antall_ansatte: n["antall_ansatte"] || 0,

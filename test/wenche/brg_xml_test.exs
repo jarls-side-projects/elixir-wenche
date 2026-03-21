@@ -122,9 +122,16 @@ defmodule Wenche.BrgXmlTest do
         end)
 
       case result do
-        [] -> assert true
-        {:mismatch, name, stack} -> flunk("Closing </#{name}> does not match open tag stack: #{inspect(Enum.take(stack, 3))}")
-        remaining -> flunk("Unclosed tags remaining: #{inspect(remaining)}")
+        [] ->
+          assert true
+
+        {:mismatch, name, stack} ->
+          flunk(
+            "Closing </#{name}> does not match open tag stack: #{inspect(Enum.take(stack, 3))}"
+          )
+
+        remaining ->
+          flunk("Unclosed tags remaining: #{inspect(remaining)}")
       end
     end
 
