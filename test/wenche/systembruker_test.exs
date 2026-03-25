@@ -97,6 +97,57 @@ defmodule Wenche.SystembrukerTest do
     end
   end
 
+  describe "rights/1 configurable scopes" do
+    test "default rights include årsregnskap and aksjonærregister only" do
+      default = Systembruker.rights()
+
+      values =
+        Enum.flat_map(default, fn %{"resource" => resources} ->
+          Enum.map(resources, & &1["value"])
+        end)
+
+      assert "app_brg_aarsregnskap-vanlig-202406" in values
+      assert "ske-innrapportering-aksjonaerregisteroppgave" in values
+      refute "app_skd_formueinntekt-skattemelding-v2" in values
+    end
+
+    test "skattemelding feature adds skattemelding scope" do
+      with_skatt = Systembruker.rights([:skattemelding])
+
+      values =
+        Enum.flat_map(with_skatt, fn %{"resource" => resources} ->
+          Enum.map(resources, & &1["value"])
+        end)
+
+      assert "app_brg_aarsregnskap-vanlig-202406" in values
+      assert "ske-innrapportering-aksjonaerregisteroppgave" in values
+      assert "app_skd_formueinntekt-skattemelding-v2" in values
+    end
+
+    test "unknown features are ignored" do
+      result = Systembruker.rights([:nonexistent_feature])
+      assert result == Systembruker.rights()
+    end
+
+    test "empty features list returns default rights" do
+      assert Systembruker.rights([]) == Systembruker.rights()
+    end
+  end
+
+  describe "resource_ids/1 configurable scopes" do
+    test "default resource_ids exclude skattemelding" do
+      ids = Systembruker.resource_ids()
+      assert length(ids) == 2
+      refute "app_skd_formueinntekt-skattemelding-v2" in ids
+    end
+
+    test "resource_ids with skattemelding feature includes all three" do
+      ids = Systembruker.resource_ids([:skattemelding])
+      assert length(ids) == 3
+      assert "app_skd_formueinntekt-skattemelding-v2" in ids
+    end
+  end
+
   describe "hent_forespoersel_status/3" do
     test "does not require :name option" do
       # This function only needs a request_id, not a system name.
