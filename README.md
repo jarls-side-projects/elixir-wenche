@@ -18,7 +18,7 @@ Ported from the Python CLI tool [Wenche](https://github.com/olefredrik/Wenche).
 | `Wenche.Aarsregnskap` | Annual accounts submission flow (config, validation, submission) | `wenche/aarsregnskap.py` |
 | `Wenche.BrgXml` | BRG annual statement XML (hovedskjema/underskjema) | `wenche/brg_xml.py` |
 | `Wenche.Ixbrl` | Inline XBRL (iXBRL) HTML document generation | `wenche/xbrl.py` |
-| `Wenche.Skattemelding` | Tax calculation with fritaksmetoden (RF-1028/RF-1167) | `wenche/skattemelding.py` |
+| `Wenche.Skattemelding` | Tax calculation with fritaksmetoden (RF-1028/RF-1167). **Note:** systemic submission is experimental — see module docs. | `wenche/skattemelding.py` |
 | `Wenche.Aksjonaerregister` | RF-1086 shareholder register XML generation | `wenche/aksjonaerregister.py` |
 | `Wenche.Models` | Data structures (Selskap, Aarsregnskap, Resultatregnskap, Balanse, etc.) | `wenche/models.py` |
 
@@ -186,22 +186,34 @@ xml = Wenche.Aksjonaerregister.generer_xml(oppgave)
 
 ### System User Setup (One-time)
 
+By default, the system user requests rights for årsregnskap and aksjonærregisteroppgaven.
+The skattemelding scope is **not included by default** because systemic submission requires
+being a registered revisor or regnskapsfører. Enable it explicitly via the `:features` option
+if you have the appropriate authorization.
+
 ```elixir
 # Get admin token
 {:ok, admin_token} = Wenche.Maskinporten.get_admin_token(config)
 
-# Register system (once per vendor)
-{:ok, _} = Wenche.Systembruker.registrer_system(admin_token, vendor_orgnr, client_id)
+# Register system with default rights (årsregnskap + aksjonærregister)
+{:ok, _} = Wenche.Systembruker.registrer_system(admin_token, vendor_orgnr, client_id,
+  name: "my_system", description: %{"nb" => "Mitt system", "nn" => "Mitt system", "en" => "My system"})
+
+# Or include skattemelding scope (requires revisor/regnskapsfører authorization)
+{:ok, _} = Wenche.Systembruker.registrer_system(admin_token, vendor_orgnr, client_id,
+  name: "my_system", description: %{"nb" => "...", "nn" => "...", "en" => "..."},
+  features: [:skattemelding])
 
 # Create system user request for an organization
-{:ok, request} = Wenche.Systembruker.opprett_forespoersel(admin_token, vendor_orgnr, org_nummer)
-# User must approve at request["confirmUrl"]
+{:ok, request} = Wenche.Systembruker.opprett_forespoersel(admin_token, vendor_orgnr, org_nummer,
+  name: "my_system")
 
 # Check approval status
 {:ok, status} = Wenche.Systembruker.hent_forespoersel_status(admin_token, request["id"])
 
 # List all approved system users
-{:ok, users} = Wenche.Systembruker.hent_systembrukere(admin_token, vendor_orgnr)
+{:ok, users} = Wenche.Systembruker.hent_systembrukere(admin_token, vendor_orgnr,
+  name: "my_system")
 ```
 
 ## License

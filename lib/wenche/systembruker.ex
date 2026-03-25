@@ -16,6 +16,17 @@ defmodule Wenche.Systembruker do
   `registrer_system/4` additionally requires a `:description` option — a map
   with `"nb"`, `"nn"`, and `"en"` keys describing the system.
 
+  ## Configurable scopes
+
+  By default, the system requests rights for årsregnskap and aksjonærregisteroppgaven.
+  Additional scopes can be enabled via the `:features` option:
+
+      # Default — årsregnskap + aksjonærregister only
+      Wenche.Systembruker.rights()
+
+      # Include skattemelding scope
+      Wenche.Systembruker.rights([:skattemelding])
+
   ## Setup (run once)
 
   1. `registrer_system/4` — registers the system in Altinn's system register
@@ -30,10 +41,8 @@ defmodule Wenche.Systembruker do
     "prod" => "https://platform.altinn.no"
   }
 
-  # Resource IDs for Altinn 3 apps
-  # BRG årsregnskap: Altinn 3-app, ressurs-ID på format app_{org}_{appnavn}.
-  # SKD aksjonærregisteroppgave: SKDs eget REST-API, ressurs-ID fra SKDs API-dokumentasjon.
-  @rights [
+  # Default rights — always included
+  @default_rights [
     %{
       "resource" => [
         %{"id" => "urn:altinn:resource", "value" => "app_brg_aarsregnskap-vanlig-202406"}
@@ -46,8 +55,12 @@ defmodule Wenche.Systembruker do
           "value" => "ske-innrapportering-aksjonaerregisteroppgave"
         }
       ]
-    },
-    %{
+    }
+  ]
+
+  # Optional rights — enabled via :features
+  @optional_rights %{
+    skattemelding: %{
       "resource" => [
         %{
           "id" => "urn:altinn:resource",
@@ -55,21 +68,56 @@ defmodule Wenche.Systembruker do
         }
       ]
     }
-  ]
+  }
 
   @doc """
   Returns the list of resource IDs that the system requests access to.
 
-  Each entry is a short resource value string, e.g. `"app_brg_aarsregnskap-vanlig-202406"`.
+  Accepts an optional list of feature atoms to enable additional scopes.
+
+  ## Examples
+
+      Wenche.Systembruker.resource_ids()
+      #=> ["app_brg_aarsregnskap-vanlig-202406", "ske-innrapportering-aksjonaerregisteroppgave"]
+
+      Wenche.Systembruker.resource_ids([:skattemelding])
+      #=> ["app_brg_aarsregnskap-vanlig-202406", "ske-innrapportering-aksjonaerregisteroppgave",
+      #    "app_skd_formueinntekt-skattemelding-v2"]
   """
-  def resource_ids do
-    Enum.map(@rights, fn %{"resource" => [%{"value" => value}]} -> value end)
+  def resource_ids(features \\ []) do
+    rights(features)
+    |> Enum.map(fn %{"resource" => [%{"value" => value}]} -> value end)
   end
 
   @doc """
   Returns the raw rights structure used in Altinn API payloads.
+
+  Accepts an optional list of feature atoms to enable additional scopes.
+  By default, only årsregnskap and aksjonærregisteroppgaven rights are included.
+
+  ## Supported features
+
+    * `:skattemelding` — adds the skattemelding scope
+      (`app_skd_formueinntekt-skattemelding-v2`). **Note:** systemic submission
+      of skattemelding requires being a registered revisor or regnskapsfører.
+      Enable this only if you have the appropriate authorization.
+
+  ## Examples
+
+      Wenche.Systembruker.rights()
+      #=> [%{"resource" => [...]}, %{"resource" => [...]}]
+
+      Wenche.Systembruker.rights([:skattemelding])
+      #=> [%{"resource" => [...]}, %{"resource" => [...]}, %{"resource" => [...]}]
   """
-  def rights, do: @rights
+  def rights(features \\ []) do
+    optional =
+      features
+      |> Enum.filter(&Map.has_key?(@optional_rights, &1))
+      |> Enum.map(&Map.fetch!(@optional_rights, &1))
+
+    @default_rights ++ optional
+  end
 
   @doc """
   Returns the system ID in the format `<vendor_orgnr>_<name>`.
@@ -91,6 +139,7 @@ defmodule Wenche.Systembruker do
   ## Optional options
 
     * `:env` — `"test"` or `"prod"` (default: `"prod"`)
+    * `:features` — list of feature atoms to enable additional scopes (default: `[]`)
 
   Returns `{:ok, response_map}` or `{:error, reason}`.
   """
@@ -98,9 +147,10 @@ defmodule Wenche.Systembruker do
     name = fetch_required!(opts, :name)
     description = fetch_required!(opts, :description)
     env = Keyword.get(opts, :env, "prod")
+    features = Keyword.get(opts, :features, [])
     base = Map.fetch!(@bases, env)
     sid = system_id(vendor_orgnr, name)
-    payload = bygg_system_payload(vendor_orgnr, client_id, name, description)
+    payload = bygg_system_payload(vendor_orgnr, client_id, name, description, features)
 
     headers = [
       {"Authorization", "Bearer #{maskinporten_token}"},
@@ -167,10 +217,12 @@ defmodule Wenche.Systembruker do
   ## Optional options
 
     * `:env` — `"test"` or `"prod"` (default: `"prod"`)
+    * `:features` — list of feature atoms to enable additional scopes (default: `[]`)
   """
   def opprett_forespoersel(maskinporten_token, vendor_orgnr, org_nummer, opts \\ []) do
     name = fetch_required!(opts, :name)
     env = Keyword.get(opts, :env, "prod")
+    features = Keyword.get(opts, :features, [])
     base = Map.fetch!(@bases, env)
     sid = system_id(vendor_orgnr, name)
 
@@ -178,7 +230,7 @@ defmodule Wenche.Systembruker do
       "systemId" => sid,
       "partyOrgNo" => org_nummer,
       "integrationTitle" => name,
-      "rights" => @rights
+      "rights" => rights(features)
     }
 
     headers = [
@@ -268,7 +320,7 @@ defmodule Wenche.Systembruker do
     end
   end
 
-  defp bygg_system_payload(vendor_orgnr, client_id, name, description) do
+  defp bygg_system_payload(vendor_orgnr, client_id, name, description, features) do
     sid = system_id(vendor_orgnr, name)
 
     %{
@@ -285,7 +337,7 @@ defmodule Wenche.Systembruker do
       "description" => description,
       "clientId" => [client_id],
       "isVisible" => true,
-      "rights" => @rights
+      "rights" => rights(features)
     }
   end
 
