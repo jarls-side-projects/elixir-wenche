@@ -13,6 +13,18 @@ defmodule Wenche.Skattemelding do
   - Loss carryforward deduction
   - Prior year comparison figures
   - Equity reconciliation note
+
+  > #### Experimental: Systemic submission {: .warning}
+  >
+  > Systemic submission of the skattemelding via Altinn 3 (`send_inn/4`)
+  > is **untested and highly experimental**. It requires the submitting
+  > system to be a registered revisor or regnskapsfører. The skattemelding
+  > scope (`app_skd_formueinntekt-skattemelding-v2`) is not included in
+  > the default system user rights — you must explicitly opt in via
+  > `Wenche.Systembruker.rights([:skattemelding])`.
+  >
+  > The `beregn/2` and `generer/2` functions for local tax calculation
+  > and report generation are stable and production-ready.
   """
 
   alias Wenche.Models.{
