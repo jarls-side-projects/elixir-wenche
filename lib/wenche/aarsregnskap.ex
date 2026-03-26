@@ -111,7 +111,8 @@ defmodule Wenche.Aarsregnskap do
 
   defp do_send_inn(regnskap, client, opts) do
     dry_run = Keyword.get(opts, :dry_run, false)
-    hovedskjema = BrgXml.generer_hovedskjema(regnskap)
+    brg_opts = Keyword.take(opts, [:system_navn])
+    hovedskjema = BrgXml.generer_hovedskjema(regnskap, brg_opts)
     underskjema = BrgXml.generer_underskjema(regnskap)
     org = regnskap.selskap.org_nummer
     aar = regnskap.regnskapsaar

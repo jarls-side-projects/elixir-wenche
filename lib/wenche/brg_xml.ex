@@ -30,14 +30,19 @@ defmodule Wenche.BrgXml do
   Generates Hovedskjema XML (dataFormatId=1266) for BRG annual statement.
   Contains company info, accounting period, principles, and confirmation.
 
+  ## Options
+
+    * `:system_navn` — system name reported to BRG (default: `"Wenche"`)
+
   Returns UTF-8 encoded XML bytes.
   """
-  def generer_hovedskjema(%Aarsregnskap{} = regnskap) do
+  def generer_hovedskjema(%Aarsregnskap{} = regnskap, opts \\ []) do
     s = regnskap.selskap
     aar = regnskap.regnskapsaar
     fastsettelsesdato = regnskap.fastsettelsesdato || Date.utc_today()
     signatar = regnskap.signatar || s.daglig_leder
     ikke_revideres = if regnskap.revideres, do: "nei", else: "ja"
+    system_navn = Keyword.get(opts, :system_navn, "Wenche")
 
     morselskap =
       if regnskap.balanse.eiendeler.anleggsmidler.aksjer_i_datterselskap > 0,
@@ -61,7 +66,7 @@ defmodule Wenche.BrgXml do
         </enhet>
         <opplysningerInnsending>
           <noteMaskinellBehandling orid="37499">Maskinell innsending</noteMaskinellBehandling>
-          <systemNavn orid="39007">Wenche</systemNavn>
+          <systemNavn orid="39007">#{escape(system_navn)}</systemNavn>
         </opplysningerInnsending>
       </Innsender>
       <Skjemainnhold>
