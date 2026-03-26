@@ -80,10 +80,17 @@ defmodule Wenche.BrgXmlTest do
       assert xml =~ "<regnskapsslutt orid=\"17104\">2025-12-31</regnskapsslutt>"
     end
 
-    test "includes system name" do
+    test "includes default system name" do
       xml = BrgXml.generer_hovedskjema(sample_regnskap())
 
-      assert xml =~ "Wenche"
+      assert xml =~ "<systemNavn orid=\"39007\">Wenche</systemNavn>"
+    end
+
+    test "uses custom system name when provided" do
+      xml = BrgXml.generer_hovedskjema(sample_regnskap(), system_navn: "Kontira")
+
+      assert xml =~ "<systemNavn orid=\"39007\">Kontira</systemNavn>"
+      refute xml =~ ">Wenche<"
     end
   end
 
