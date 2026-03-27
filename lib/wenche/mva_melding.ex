@@ -95,12 +95,14 @@ defmodule Wenche.MvaMelding do
 
   - `:env` — `"test"` or `"prod"` (default: `"prod"`)
   - `:token` — Altinn/Maskinporten token for authentication
+  - `:req_options` — additional options merged into `Req` calls (e.g. for test stubs)
 
   Returns `{:ok, validation_result}` or `{:error, reason}`.
   """
   def valider(mva_data, opts \\ []) do
     env = Keyword.get(opts, :env, "prod")
     token = Keyword.fetch!(opts, :token)
+    req_options = Keyword.get(opts, :req_options, [])
 
     base_url =
       Map.get(@validation_bases, env) ||
@@ -115,9 +117,10 @@ defmodule Wenche.MvaMelding do
     ]
 
     case Req.post(base_url,
-           body: melding_xml,
-           headers: headers,
-           receive_timeout: 30_000
+           Keyword.merge(
+             [body: melding_xml, headers: headers, receive_timeout: 30_000],
+             req_options
+           )
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         {:ok, body}
