@@ -1,0 +1,132 @@
+defmodule Wenche.MvaMelding do
+  @moduledoc """
+  MVA-melding (VAT return) submission to Skatteetaten via Altinn 3.
+
+  Supports submitting and validating MVA-meldinger for Norwegian companies.
+
+  ## MVA Data
+
+  The `mva_data` parameter is a map with these keys:
+
+  - `:org_nummer` — organization number (string)
+  - `:termin` — bi-monthly period 1-6
+  - `:year` — tax year (integer)
+  - `:linjer` — list of `%{mva_kode: integer, grunnlag: number, sats: number, merverdiavgift: number}`
+  - `:fastsatt_merverdiavgift` — total MVA to pay (negative = refund)
+  - `:system_name` — name of submitting system (default "Kontira")
+
+  > #### Experimental {: .warning}
+  >
+  > This module is **experimental and untested in production**. The MVA-melding
+  > scope (`app_skd_mva-melding-innsending-v1`) is not included in the default
+  > system user rights — you must explicitly opt in via
+  > `Wenche.Systembruker.rights([:mva_melding])`.
+  """
+
+  alias Wenche.{AltinnClient, MvaMeldingXml}
+
+  @validation_bases %{
+    "test" => "https://skatt-utv3.sits.no/api/mva/mva-melding/valider",
+    "prod" => "https://api.sits.no/api/mva/mva-melding/valider"
+  }
+
+  @doc """
+  Submits an MVA-melding to Skatteetaten via Altinn 3.
+
+  ## Steps
+
+  1. Generate konvolutt (envelope) and melding XML
+  2. Create Altinn instance
+  3. Upload konvolutt (update existing data element)
+  4. Upload melding (add new data element)
+  5. Advance process twice (to signing)
+
+  ## Options
+
+  - `:dry_run` — if true, writes XML files locally without submitting (default: false)
+
+  Returns `{:ok, inbox_url}` or `{:ok, {:dry_run, konvolutt_file, melding_file}}` or `{:error, reason}`.
+  """
+  def send_inn(mva_data, %AltinnClient{} = client, opts \\ []) do
+    dry_run = Keyword.get(opts, :dry_run, false)
+    org = mva_data.org_nummer
+
+    konvolutt_xml = MvaMeldingXml.generer_konvolutt_xml(mva_data)
+    melding_xml = MvaMeldingXml.generer_melding_xml(mva_data)
+
+    if dry_run do
+      konvolutt_fil = "mva_melding_#{mva_data.year}_t#{mva_data.termin}_#{org}_konvolutt.xml"
+      melding_fil = "mva_melding_#{mva_data.year}_t#{mva_data.termin}_#{org}_melding.xml"
+      File.write!(konvolutt_fil, konvolutt_xml)
+      File.write!(melding_fil, melding_xml)
+
+      {:ok, {:dry_run, konvolutt_fil, melding_fil}}
+    else
+      with {:ok, instans} <- AltinnClient.opprett_instans(client, "mva_melding", org),
+           {:ok, _} <-
+             AltinnClient.oppdater_data_element(
+               client,
+               "mva_melding",
+               instans,
+               "no.skatteetaten.fastsetting.avgift.mva.mvameldinginnsending.v1.0",
+               konvolutt_xml,
+               "application/xml"
+             ),
+           {:ok, _} <-
+             AltinnClient.legg_til_data_element(
+               client,
+               "mva_melding",
+               instans,
+               "no.skatteetaten.fastsetting.avgift.mva.skattemeldingformerverdiavgift.v1.0",
+               melding_xml,
+               "application/xml"
+             ),
+           {:ok, _} <- AltinnClient.fullfoor_instans(client, "mva_melding", instans),
+           {:ok, inbox_url} <- AltinnClient.fullfoor_instans(client, "mva_melding", instans) do
+        {:ok, inbox_url}
+      end
+    end
+  end
+
+  @doc """
+  Validates an MVA-melding against Skatteetaten's validation API.
+
+  ## Options
+
+  - `:env` — `"test"` or `"prod"` (default: `"prod"`)
+  - `:token` — Altinn/Maskinporten token for authentication
+
+  Returns `{:ok, validation_result}` or `{:error, reason}`.
+  """
+  def valider(mva_data, opts \\ []) do
+    env = Keyword.get(opts, :env, "prod")
+    token = Keyword.fetch!(opts, :token)
+
+    base_url =
+      Map.get(@validation_bases, env) ||
+        raise ArgumentError, "invalid env: #{inspect(env)}. Use \"prod\" or \"test\"."
+
+    melding_xml = MvaMeldingXml.generer_melding_xml(mva_data)
+
+    headers = [
+      {"content-type", "application/xml"},
+      {"authorization", "Bearer #{token}"},
+      {"accept", "application/json"}
+    ]
+
+    case Req.post(base_url,
+           body: melding_xml,
+           headers: headers,
+           receive_timeout: 30_000
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        {:ok, body}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:valider_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:request_failed, reason}}
+    end
+  end
+end
