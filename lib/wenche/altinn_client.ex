@@ -27,7 +27,8 @@ defmodule Wenche.AltinnClient do
   @apps %{
     "aarsregnskap" => %{org: "brg", app: "aarsregnskap-vanlig-202406"},
     "aksjonaerregister" => %{org: "skd", app: "a2-1051-241111"},
-    "skattemelding" => %{org: "skd", app: "formueinntekt-selskapsmelding"}
+    "skattemelding" => %{org: "skd", app: "formueinntekt-selskapsmelding"},
+    "mva_melding" => %{org: "skd", app: "mva-melding-innsending-v1"}
   }
 
   defstruct [:token, :env, :apps_base, :inbox_url]
@@ -138,6 +139,43 @@ defmodule Wenche.AltinnClient do
 
       {:error, _} = error ->
         error
+    end
+  end
+
+  @doc """
+  Adds a new data element to an instance with POST.
+
+  Unlike `oppdater_data_element/6` which updates an existing element,
+  this creates a new data element on the instance.
+
+  Returns `{:ok, response_body}` or `{:error, reason}`.
+  """
+  def legg_til_data_element(
+        %__MODULE__{} = client,
+        app_key,
+        instans,
+        data_type,
+        data,
+        content_type
+      ) do
+    instance_id = instans["id"]
+    url = "#{app_base(client, app_key)}/instances/#{instance_id}/data?dataType=#{data_type}"
+
+    headers = [{"content-type", content_type} | auth_headers(client.token)]
+
+    case Req.post(url,
+           body: data,
+           headers: headers,
+           receive_timeout: 30_000
+         ) do
+      {:ok, %Req.Response{status: status, body: body}} when status in [200, 201] ->
+        {:ok, body}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:altinn_upload_error, status, body}}
+
+      {:error, reason} ->
+        {:error, {:altinn_request_failed, reason}}
     end
   end
 
