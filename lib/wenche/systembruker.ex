@@ -163,6 +163,7 @@ defmodule Wenche.Systembruker do
     description = fetch_required!(opts, :description)
     env = Keyword.get(opts, :env, "prod")
     features = Keyword.get(opts, :features, [])
+    req_options = Keyword.get(opts, :req_options, [])
     base = Map.fetch!(@bases, env)
     sid = system_id(vendor_orgnr, name)
     payload = bygg_system_payload(vendor_orgnr, client_id, name, description, features)
@@ -174,12 +175,15 @@ defmodule Wenche.Systembruker do
 
     url = "#{base}/authentication/api/v1/systemregister/vendor"
 
-    case Req.post(url, json: payload, headers: headers, receive_timeout: 15_000) do
+    case Req.post(
+           url,
+           Keyword.merge([json: payload, headers: headers, receive_timeout: 15_000], req_options)
+         ) do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
         {:ok, body}
 
       {:ok, %Req.Response{status: 400, body: body}} when is_binary(body) ->
-        handle_register_conflict(body, url, sid, payload, headers)
+        handle_register_conflict(body, url, sid, payload, headers, req_options)
 
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:system_register_failed, status, body}}
@@ -189,16 +193,19 @@ defmodule Wenche.Systembruker do
     end
   end
 
-  defp handle_register_conflict(body, url, sid, payload, headers) do
+  defp handle_register_conflict(body, url, sid, payload, headers, req_options) do
     if String.contains?(body, "already exists") do
-      update_existing_system("#{url}/#{sid}", sid, payload, headers)
+      update_existing_system("#{url}/#{sid}", sid, payload, headers, req_options)
     else
       {:error, {:system_register_failed, 400, body}}
     end
   end
 
-  defp update_existing_system(update_url, sid, payload, headers) do
-    case Req.put(update_url, json: payload, headers: headers, receive_timeout: 15_000) do
+  defp update_existing_system(update_url, sid, payload, headers, req_options) do
+    case Req.put(
+           update_url,
+           Keyword.merge([json: payload, headers: headers, receive_timeout: 15_000], req_options)
+         ) do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
         normalize_update_response(body, sid)
 
@@ -238,6 +245,7 @@ defmodule Wenche.Systembruker do
     name = fetch_required!(opts, :name)
     env = Keyword.get(opts, :env, "prod")
     features = Keyword.get(opts, :features, [])
+    req_options = Keyword.get(opts, :req_options, [])
     base = Map.fetch!(@bases, env)
     sid = system_id(vendor_orgnr, name)
 
@@ -255,7 +263,10 @@ defmodule Wenche.Systembruker do
 
     url = "#{base}/authentication/api/v1/systemuser/request/vendor"
 
-    case Req.post(url, json: payload, headers: headers, receive_timeout: 15_000) do
+    case Req.post(
+           url,
+           Keyword.merge([json: payload, headers: headers, receive_timeout: 15_000], req_options)
+         ) do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
         {:ok, body}
 
@@ -278,12 +289,16 @@ defmodule Wenche.Systembruker do
   """
   def hent_forespoersel_status(maskinporten_token, request_id, opts \\ []) do
     env = Keyword.get(opts, :env, "prod")
+    req_options = Keyword.get(opts, :req_options, [])
     base = Map.fetch!(@bases, env)
 
     headers = [{"Authorization", "Bearer #{maskinporten_token}"}]
     url = "#{base}/authentication/api/v1/systemuser/request/vendor/#{request_id}"
 
-    case Req.get(url, headers: headers, receive_timeout: 15_000) do
+    case Req.get(
+           url,
+           Keyword.merge([headers: headers, receive_timeout: 15_000], req_options)
+         ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         {:ok, body}
 
@@ -311,13 +326,17 @@ defmodule Wenche.Systembruker do
   def hent_systembrukere(maskinporten_token, vendor_orgnr, opts \\ []) do
     name = fetch_required!(opts, :name)
     env = Keyword.get(opts, :env, "prod")
+    req_options = Keyword.get(opts, :req_options, [])
     base = Map.fetch!(@bases, env)
     sid = system_id(vendor_orgnr, name)
 
     headers = [{"Authorization", "Bearer #{maskinporten_token}"}]
     url = "#{base}/authentication/api/v1/systemuser/vendor/bysystem/#{sid}"
 
-    case Req.get(url, headers: headers, receive_timeout: 15_000) do
+    case Req.get(
+           url,
+           Keyword.merge([headers: headers, receive_timeout: 15_000], req_options)
+         ) do
       {:ok, %Req.Response{status: 200, body: body}} when is_list(body) ->
         {:ok, body}
 

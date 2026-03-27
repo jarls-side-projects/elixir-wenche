@@ -222,9 +222,14 @@ defmodule Wenche.AarsregnskapTest do
       assert regnskap.balanse.eiendeler.omloepmidler.bankinnskudd == 80_000
       assert regnskap.balanse.egenkapital_og_gjeld.egenkapital.aksjekapital == 30_000
       assert regnskap.balanse.egenkapital_og_gjeld.egenkapital.annen_egenkapital == 50_000
-      assert regnskap.balanse.egenkapital_og_gjeld.langsiktig_gjeld.andre_langsiktige_laan == 10_000
+
+      assert regnskap.balanse.egenkapital_og_gjeld.langsiktig_gjeld.andre_langsiktige_laan ==
+               10_000
+
       assert regnskap.balanse.egenkapital_og_gjeld.kortsiktig_gjeld.leverandoergjeld == 5_000
-      assert regnskap.balanse.egenkapital_og_gjeld.kortsiktig_gjeld.skyldige_offentlige_avgifter == 10_000
+
+      assert regnskap.balanse.egenkapital_og_gjeld.kortsiktig_gjeld.skyldige_offentlige_avgifter ==
+               10_000
 
       # Noter
       assert regnskap.noter.antall_ansatte == 2

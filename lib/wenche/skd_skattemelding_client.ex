@@ -14,11 +14,12 @@ defmodule Wenche.SkdSkattemeldingClient do
     "prod" => "https://api.skatteetaten.no/api/skattemelding/v2"
   }
 
-  defstruct [:base, :token]
+  defstruct [:base, :token, req_options: []]
 
   @type t :: %__MODULE__{
           base: String.t(),
-          token: String.t()
+          token: String.t(),
+          req_options: keyword()
         }
 
   @doc """
@@ -27,15 +28,17 @@ defmodule Wenche.SkdSkattemeldingClient do
   ## Options
 
   - `:env` — `"test"` or `"prod"` (default: `"prod"`)
+  - `:req_options` — extra options passed to `Req` (default: `[]`)
   """
   def new(token, opts \\ []) do
     env = Keyword.get(opts, :env, "prod")
+    req_options = Keyword.get(opts, :req_options, [])
 
     base =
       Map.get(@bases, env) ||
         raise ArgumentError, "invalid env: #{inspect(env)}. Use \"prod\" or \"test\"."
 
-    %__MODULE__{base: base, token: token}
+    %__MODULE__{base: base, token: token, req_options: req_options}
   end
 
   @doc """
@@ -46,7 +49,13 @@ defmodule Wenche.SkdSkattemeldingClient do
   def hent_utkast(%__MODULE__{} = client, year, org_nr) do
     url = "#{client.base}/utkast/#{year}/#{org_nr}"
 
-    case Req.get(url, headers: headers(client.token), receive_timeout: 30_000) do
+    case Req.get(
+           url,
+           Keyword.merge(
+             [headers: headers(client.token), receive_timeout: 30_000],
+             client.req_options
+           )
+         ) do
       {:ok, %Req.Response{status: 200, body: body}} when is_map(body) ->
         {:ok, body}
 
@@ -71,10 +80,16 @@ defmodule Wenche.SkdSkattemeldingClient do
   def valider(%__MODULE__{} = client, year, org_nr, xml) do
     url = "#{client.base}/valider/#{year}/#{org_nr}"
 
-    case Req.post(url,
-           body: xml,
-           headers: [{"content-type", "application/xml"} | headers(client.token)],
-           receive_timeout: 30_000
+    case Req.post(
+           url,
+           Keyword.merge(
+             [
+               body: xml,
+               headers: [{"content-type", "application/xml"} | headers(client.token)],
+               receive_timeout: 30_000
+             ],
+             client.req_options
+           )
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         {:ok, body}

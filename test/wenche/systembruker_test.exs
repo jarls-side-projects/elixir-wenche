@@ -156,4 +156,81 @@ defmodule Wenche.SystembrukerTest do
       assert {:error, _} = result
     end
   end
+
+  describe "req_options support" do
+    @req_opts [
+      plug: {Req.Test, Wenche.Systembruker},
+      retry: false
+    ]
+
+    test "registrer_system passes req_options through to Req" do
+      Req.Test.stub(Wenche.Systembruker, fn conn ->
+        assert conn.method == "POST"
+
+        conn
+        |> Plug.Conn.put_status(200)
+        |> Req.Test.json(%{"id" => "912345678_kontira"})
+      end)
+
+      assert {:ok, body} =
+               Systembruker.registrer_system(@token, @vendor_orgnr, @client_id,
+                 name: "kontira",
+                 description: @valid_description,
+                 env: "test",
+                 req_options: @req_opts
+               )
+
+      assert body["id"] == "912345678_kontira"
+    end
+
+    test "opprett_forespoersel passes req_options through to Req" do
+      Req.Test.stub(Wenche.Systembruker, fn conn ->
+        assert conn.method == "POST"
+
+        conn
+        |> Plug.Conn.put_status(200)
+        |> Req.Test.json(%{"id" => "request-uuid", "status" => "New"})
+      end)
+
+      assert {:ok, body} =
+               Systembruker.opprett_forespoersel(@token, @vendor_orgnr, @org_nummer,
+                 name: "kontira",
+                 env: "test",
+                 req_options: @req_opts
+               )
+
+      assert body["status"] == "New"
+    end
+
+    test "hent_forespoersel_status passes req_options through to Req" do
+      Req.Test.stub(Wenche.Systembruker, fn conn ->
+        assert conn.method == "GET"
+        Req.Test.json(conn, %{"status" => "Accepted"})
+      end)
+
+      assert {:ok, body} =
+               Systembruker.hent_forespoersel_status(@token, "request-uuid",
+                 env: "test",
+                 req_options: @req_opts
+               )
+
+      assert body["status"] == "Accepted"
+    end
+
+    test "hent_systembrukere passes req_options through to Req" do
+      Req.Test.stub(Wenche.Systembruker, fn conn ->
+        assert conn.method == "GET"
+        Req.Test.json(conn, [%{"id" => "user-1"}])
+      end)
+
+      assert {:ok, users} =
+               Systembruker.hent_systembrukere(@token, @vendor_orgnr,
+                 name: "kontira",
+                 env: "test",
+                 req_options: @req_opts
+               )
+
+      assert [%{"id" => "user-1"}] = users
+    end
+  end
 end

@@ -19,16 +19,22 @@ defmodule Wenche.SkdClient do
   @doc """
   Creates a new SKD client config.
 
-  Returns a map with base URL and token for use in other functions.
+  Returns a map with base URL, token, and req_options for use in other functions.
+
+  ## Options
+
+  - `:env` — `"test"` or `"prod"` (default: `"prod"`)
+  - `:req_options` — extra options passed to `Req` (default: `[]`)
   """
   def new(maskinporten_token, opts \\ []) do
     env = Keyword.get(opts, :env, "prod")
+    req_options = Keyword.get(opts, :req_options, [])
 
     base =
       Map.get(@bases, env) ||
         raise ArgumentError, "invalid env: #{inspect(env)}. Use \"prod\" or \"test\"."
 
-    %{base: base, token: maskinporten_token}
+    %{base: base, token: maskinporten_token, req_options: req_options}
   end
 
   @doc """
@@ -36,10 +42,17 @@ defmodule Wenche.SkdClient do
 
   Returns `{:ok, hovedskjemaid}` or `{:error, reason}`.
   """
-  def send_hovedskjema(%{base: base, token: token}, regnskapsaar, xml) do
+  def send_hovedskjema(%{base: base, token: token} = client, regnskapsaar, xml) do
     url = "#{base}/#{regnskapsaar}/1086H"
+    req_options = Map.get(client, :req_options, [])
 
-    case Req.post(url, body: xml, headers: headers(token), receive_timeout: 30_000) do
+    case Req.post(
+           url,
+           Keyword.merge(
+             [body: xml, headers: headers(token), receive_timeout: 30_000],
+             req_options
+           )
+         ) do
       {:ok, %Req.Response{status: status, body: %{"hovedskjemaid" => id}}}
       when status in 200..299 ->
         {:ok, id}
@@ -57,10 +70,17 @@ defmodule Wenche.SkdClient do
 
   Returns `:ok` or `{:error, reason}`.
   """
-  def send_underskjema(%{base: base, token: token}, regnskapsaar, hovedskjemaid, xml) do
+  def send_underskjema(%{base: base, token: token} = client, regnskapsaar, hovedskjemaid, xml) do
     url = "#{base}/#{regnskapsaar}/#{hovedskjemaid}/1086U"
+    req_options = Map.get(client, :req_options, [])
 
-    case Req.post(url, body: xml, headers: headers(token), receive_timeout: 30_000) do
+    case Req.post(
+           url,
+           Keyword.merge(
+             [body: xml, headers: headers(token), receive_timeout: 30_000],
+             req_options
+           )
+         ) do
       {:ok, %Req.Response{status: status}} when status in 200..299 ->
         :ok
 
@@ -77,11 +97,24 @@ defmodule Wenche.SkdClient do
 
   Returns `{:ok, response_map}` with forsendelse-ID and dialog-ID, or `{:error, reason}`.
   """
-  def bekreft(%{base: base, token: token}, regnskapsaar, hovedskjemaid, antall_underskjema) do
+  def bekreft(
+        %{base: base, token: token} = client,
+        regnskapsaar,
+        hovedskjemaid,
+        antall_underskjema
+      ) do
     url =
       "#{base}/#{regnskapsaar}/#{hovedskjemaid}/bekreft?antall_underskjema=#{antall_underskjema}"
 
-    case Req.post(url, body: "", headers: headers(token), receive_timeout: 30_000) do
+    req_options = Map.get(client, :req_options, [])
+
+    case Req.post(
+           url,
+           Keyword.merge(
+             [body: "", headers: headers(token), receive_timeout: 30_000],
+             req_options
+           )
+         ) do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
         {:ok, body}
 

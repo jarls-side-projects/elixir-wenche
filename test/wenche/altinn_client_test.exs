@@ -20,6 +20,7 @@ defmodule Wenche.AltinnClientTest do
       assert client.token == "test-token"
       assert client.env == "prod"
       assert client.apps_base =~ "altinn.no"
+      assert client.req_options == []
     end
 
     test "creates a client with test env" do
@@ -29,10 +30,92 @@ defmodule Wenche.AltinnClientTest do
       assert client.apps_base =~ "tt02.altinn.no"
     end
 
+    test "stores req_options" do
+      client = AltinnClient.new("test-token", env: "test", req_options: [plug: {Req.Test, :test}])
+
+      assert client.req_options == [plug: {Req.Test, :test}]
+    end
+
     test "raises on invalid env" do
       assert_raise ArgumentError, fn ->
         AltinnClient.new("test-token", env: "invalid")
       end
+    end
+  end
+
+  describe "struct-based API with req_options" do
+    @struct_opts [
+      plug: {Req.Test, Wenche.AltinnClient.Struct},
+      retry: false
+    ]
+
+    test "opprett_instans passes req_options through" do
+      Req.Test.stub(Wenche.AltinnClient.Struct, fn conn ->
+        assert conn.method == "POST"
+
+        conn
+        |> Plug.Conn.put_status(201)
+        |> Req.Test.json(%{"id" => "50012345/abc-123"})
+      end)
+
+      client = AltinnClient.new("test-token", env: "test", req_options: @struct_opts)
+
+      assert {:ok, body} = AltinnClient.opprett_instans(client, "aarsregnskap", "912345678")
+      assert body["id"] == "50012345/abc-123"
+    end
+
+    test "hent_status passes req_options through" do
+      Req.Test.stub(Wenche.AltinnClient.Struct, fn conn ->
+        assert conn.method == "GET"
+        Req.Test.json(conn, %{"id" => "50012345/abc-123", "status" => %{"isArchived" => false}})
+      end)
+
+      client = AltinnClient.new("test-token", env: "test", req_options: @struct_opts)
+      instans = %{"id" => "50012345/abc-123"}
+
+      assert {:ok, body} = AltinnClient.hent_status(client, "aarsregnskap", instans)
+      assert body["status"]["isArchived"] == false
+    end
+
+    test "fullfoor_instans passes req_options through" do
+      Req.Test.stub(Wenche.AltinnClient.Struct, fn conn ->
+        assert conn.method == "PUT"
+        Req.Test.json(conn, %{"ended" => "2025-01-15T12:00:00Z"})
+      end)
+
+      client = AltinnClient.new("test-token", env: "test", req_options: @struct_opts)
+      instans = %{"id" => "50012345/abc-123"}
+
+      assert {:ok, _url} = AltinnClient.fullfoor_instans(client, "aarsregnskap", instans)
+    end
+
+    test "oppdater_data_element passes req_options through" do
+      Req.Test.stub(Wenche.AltinnClient.Struct, fn conn ->
+        assert conn.method == "PUT"
+
+        conn
+        |> Plug.Conn.put_status(200)
+        |> Req.Test.json(%{"id" => "data-element-id"})
+      end)
+
+      client = AltinnClient.new("test-token", env: "test", req_options: @struct_opts)
+
+      instans = %{
+        "id" => "50012345/abc-123",
+        "data" => [%{"dataType" => "hovedskjema", "id" => "data-element-id"}]
+      }
+
+      assert {:ok, body} =
+               AltinnClient.oppdater_data_element(
+                 client,
+                 "aarsregnskap",
+                 instans,
+                 "hovedskjema",
+                 "<xml>test</xml>",
+                 "application/xml"
+               )
+
+      assert body["id"] == "data-element-id"
     end
   end
 

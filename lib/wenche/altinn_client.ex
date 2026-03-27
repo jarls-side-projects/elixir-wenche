@@ -31,13 +31,14 @@ defmodule Wenche.AltinnClient do
     "mva_melding" => %{org: "skd", app: "mva-melding-innsending-v1"}
   }
 
-  defstruct [:token, :env, :apps_base, :inbox_url]
+  defstruct [:token, :env, :apps_base, :inbox_url, req_options: []]
 
   @type t :: %__MODULE__{
           token: String.t(),
           env: String.t(),
           apps_base: String.t(),
-          inbox_url: String.t()
+          inbox_url: String.t(),
+          req_options: keyword()
         }
 
   @doc """
@@ -46,9 +47,11 @@ defmodule Wenche.AltinnClient do
   ## Options
 
   - `:env` — `"test"` or `"prod"` (default: `"prod"`)
+  - `:req_options` — extra options passed to `Req` (default: `[]`)
   """
   def new(altinn_token, opts \\ []) do
     env = Keyword.get(opts, :env, "prod")
+    req_options = Keyword.get(opts, :req_options, [])
 
     unless Map.has_key?(@bases, env) do
       raise ArgumentError, "Invalid env: #{inspect(env)}. Use 'prod' or 'test'."
@@ -60,7 +63,8 @@ defmodule Wenche.AltinnClient do
       token: altinn_token,
       env: env,
       apps_base: base.apps,
-      inbox_url: base.inbox
+      inbox_url: base.inbox,
+      req_options: req_options
     }
   end
 
@@ -82,10 +86,12 @@ defmodule Wenche.AltinnClient do
       "instanceOwner" => %{"organisationNumber" => org_nummer}
     }
 
-    case Req.post(url,
-           json: body,
-           headers: auth_headers(client.token),
-           receive_timeout: 30_000
+    case Req.post(
+           url,
+           Keyword.merge(
+             [json: body, headers: auth_headers(client.token), receive_timeout: 30_000],
+             client.req_options
+           )
          ) do
       {:ok, %Req.Response{status: status, body: body}} when status in [200, 201] ->
         {:ok, body}
@@ -122,10 +128,12 @@ defmodule Wenche.AltinnClient do
 
         headers = [{"content-type", content_type} | auth_headers(client.token)]
 
-        case Req.put(url,
-               body: data,
-               headers: headers,
-               receive_timeout: 30_000
+        case Req.put(
+               url,
+               Keyword.merge(
+                 [body: data, headers: headers, receive_timeout: 30_000],
+                 client.req_options
+               )
              ) do
           {:ok, %Req.Response{status: status, body: body}} when status in [200, 201] ->
             {:ok, body}
@@ -191,9 +199,12 @@ defmodule Wenche.AltinnClient do
     instance_id = instans["id"]
     url = "#{app_base(client, app_key)}/instances/#{instance_id}/process/next"
 
-    case Req.put(url,
-           headers: auth_headers(client.token),
-           receive_timeout: 30_000
+    case Req.put(
+           url,
+           Keyword.merge(
+             [headers: auth_headers(client.token), receive_timeout: 30_000],
+             client.req_options
+           )
          ) do
       {:ok, %Req.Response{status: 200}} ->
         {:ok, client.inbox_url}
@@ -215,9 +226,12 @@ defmodule Wenche.AltinnClient do
     instance_id = instans["id"]
     url = "#{app_base(client, app_key)}/instances/#{instance_id}"
 
-    case Req.get(url,
-           headers: auth_headers(client.token),
-           receive_timeout: 30_000
+    case Req.get(
+           url,
+           Keyword.merge(
+             [headers: auth_headers(client.token), receive_timeout: 30_000],
+             client.req_options
+           )
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         {:ok, body}
