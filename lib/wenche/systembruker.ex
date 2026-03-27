@@ -24,8 +24,8 @@ defmodule Wenche.Systembruker do
       # Default — årsregnskap + aksjonærregister only
       Wenche.Systembruker.rights()
 
-      # Include skattemelding scope
-      Wenche.Systembruker.rights([:skattemelding])
+      # Include skattemelding and mva_melding scopes
+      Wenche.Systembruker.rights([:skattemelding, :mva_melding])
 
   ## Setup (run once)
 
@@ -67,6 +67,14 @@ defmodule Wenche.Systembruker do
           "value" => "app_skd_formueinntekt-skattemelding-v2"
         }
       ]
+    },
+    mva_melding: %{
+      "resource" => [
+        %{
+          "id" => "urn:altinn:resource",
+          "value" => "app_skd_mva-melding-innsending-etterlevering-v1"
+        }
+      ]
     }
   }
 
@@ -83,6 +91,11 @@ defmodule Wenche.Systembruker do
       Wenche.Systembruker.resource_ids([:skattemelding])
       #=> ["app_brg_aarsregnskap-vanlig-202406", "ske-innrapportering-aksjonaerregisteroppgave",
       #    "app_skd_formueinntekt-skattemelding-v2"]
+
+      Wenche.Systembruker.resource_ids([:skattemelding, :mva_melding])
+      #=> ["app_brg_aarsregnskap-vanlig-202406", "ske-innrapportering-aksjonaerregisteroppgave",
+      #    "app_skd_formueinntekt-skattemelding-v2",
+      #    "app_skd_mva-melding-innsending-etterlevering-v1"]
   """
   def resource_ids(features \\ []) do
     rights(features)
@@ -101,6 +114,8 @@ defmodule Wenche.Systembruker do
       (`app_skd_formueinntekt-skattemelding-v2`). **Note:** systemic submission
       of skattemelding requires being a registered revisor or regnskapsfører.
       Enable this only if you have the appropriate authorization.
+    * `:mva_melding` — adds the MVA-melding scope
+      (`app_skd_mva-melding-innsending-etterlevering-v1`).
 
   ## Examples
 
