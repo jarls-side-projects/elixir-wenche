@@ -72,7 +72,7 @@ defmodule Wenche.Systembruker do
       "resource" => [
         %{
           "id" => "urn:altinn:resource",
-          "value" => "app_skd_mva-melding-innsending-etterlevering-v1"
+          "value" => "app_skd_mva-melding-innsending-v1"
         }
       ]
     }
@@ -95,7 +95,7 @@ defmodule Wenche.Systembruker do
       Wenche.Systembruker.resource_ids([:skattemelding, :mva_melding])
       #=> ["app_brg_aarsregnskap-vanlig-202406", "ske-innrapportering-aksjonaerregisteroppgave",
       #    "app_skd_formueinntekt-skattemelding-v2",
-      #    "app_skd_mva-melding-innsending-etterlevering-v1"]
+      #    "app_skd_mva-melding-innsending-v1"]
   """
   def resource_ids(features \\ []) do
     rights(features)
@@ -115,7 +115,7 @@ defmodule Wenche.Systembruker do
       of skattemelding requires being a registered revisor or regnskapsfører.
       Enable this only if you have the appropriate authorization.
     * `:mva_melding` — adds the MVA-melding scope
-      (`app_skd_mva-melding-innsending-etterlevering-v1`).
+      (`app_skd_mva-melding-innsending-v1`).
 
   ## Examples
 
