@@ -354,6 +354,44 @@ defmodule Wenche.Systembruker do
     end
   end
 
+  @doc """
+  Deletes (marks as deleted) a system from Altinn's system register.
+
+  Returns `:ok` or `{:error, reason}`.
+
+  ## Required options
+
+    * `:name` — short lowercase system identifier (e.g. `"kontira"`)
+
+  ## Optional options
+
+    * `:env` — `"test"` or `"prod"` (default: `"prod"`)
+  """
+  def slett_system(maskinporten_token, vendor_orgnr, opts \\ []) do
+    name = fetch_required!(opts, :name)
+    env = Keyword.get(opts, :env, "prod")
+    req_options = Keyword.get(opts, :req_options, [])
+    base = Map.fetch!(@bases, env)
+    sid = system_id(vendor_orgnr, name)
+
+    headers = [{"Authorization", "Bearer #{maskinporten_token}"}]
+    url = "#{base}/authentication/api/v1/systemregister/vendor/#{sid}"
+
+    case Req.delete(
+           url,
+           Keyword.merge([headers: headers, receive_timeout: 15_000], req_options)
+         ) do
+      {:ok, %Req.Response{status: status}} when status in 200..204 ->
+        :ok
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:system_delete_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:request_failed, reason}}
+    end
+  end
+
   defp bygg_system_payload(vendor_orgnr, client_id, name, description, features) do
     sid = system_id(vendor_orgnr, name)
 
