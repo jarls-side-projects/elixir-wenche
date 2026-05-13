@@ -71,7 +71,7 @@ defmodule Wenche.SkdSkattemeldingClientTest do
       Req.Test.stub(Wenche.SkdSkattemeldingClient, fn conn ->
         headers = Map.new(conn.req_headers)
         assert headers["accept"] == "application/xml;charset=UTF-8"
-        assert headers["content-type"] == "application/xml"
+        assert headers["content-type"] == "application/xml;charset=UTF-8"
 
         Req.Test.json(conn, %{"resultat" => "ok"})
       end)
