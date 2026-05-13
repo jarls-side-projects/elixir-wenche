@@ -469,6 +469,8 @@ defmodule Wenche.SkattemeldingXml do
   - `:innsendingsformaal` — `"egenfastsetting"` (default), `"klage"`, or `"endringsanmodning"`.
   - `:dokumentreferanse` — optional list of `{dokumenttype, dokumentidentifikator}` pairs to
     emit as `<dokumentreferanseTilGjeldendeDokument>` entries.
+  - `:opprettet_av` — text used for `<opprettetAv>` (default `"Wenche"`). Override
+    to identify the originating end-user system.
   """
   def generer_request_xml(skattemelding_xml, naeringsspesifikasjon_xml, opts \\ []) do
     aar = Keyword.get(opts, :inntektsaar) || raise ArgumentError, "missing :inntektsaar"
@@ -476,6 +478,7 @@ defmodule Wenche.SkattemeldingXml do
     innsendingstype = Keyword.get(opts, :innsendingstype, "komplett")
     innsendingsformaal = Keyword.get(opts, :innsendingsformaal, "egenfastsetting")
     dokumentreferanser = Keyword.get(opts, :dokumentreferanse, [])
+    opprettet_av = Keyword.get(opts, :opprettet_av, @opprettet_av)
 
     validate_enum!(:innsendingstype, innsendingstype, ~w(komplett ikkeKomplett))
 
@@ -541,7 +544,7 @@ defmodule Wenche.SkattemeldingXml do
         "  <inntektsaar>#{aar}</inntektsaar>",
         "  <innsendingsinformasjon>",
         "    <innsendingstype>#{innsendingstype}</innsendingstype>",
-        "    <opprettetAv>#{@opprettet_av}</opprettetAv>",
+        "    <opprettetAv>#{escape(opprettet_av)}</opprettetAv>",
         tin_xml,
         "    <innsendingsformaal>#{innsendingsformaal}</innsendingsformaal>",
         "  </innsendingsinformasjon>",
