@@ -734,7 +734,22 @@ defmodule Wenche.Skattemelding do
     org = regnskap.selskap.org_nummer
     aar = regnskap.regnskapsaar
 
-    xml_opts = Keyword.take(opts, [:partsnummer])
+    skd_client = Keyword.get(opts, :skd_client)
+
+    case resolve_partsnummer(opts, skd_client, aar, org) do
+      {:ok, partsnummer} ->
+        do_send_inn(regnskap, konfig, client, opts, partsnummer, dry_run)
+
+      {:error, reason} ->
+        {:error, {:partsnummer_failed, reason}}
+    end
+  end
+
+  defp do_send_inn(regnskap, konfig, client, opts, partsnummer, dry_run) do
+    org = regnskap.selskap.org_nummer
+    aar = regnskap.regnskapsaar
+
+    xml_opts = [partsnummer: partsnummer]
 
     skattemelding_xml = SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)
     naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap, xml_opts)
@@ -787,19 +802,41 @@ defmodule Wenche.Skattemelding do
     aar = regnskap.regnskapsaar
     org = regnskap.selskap.org_nummer
 
-    xml_opts = Keyword.take(opts, [:partsnummer])
+    case resolve_partsnummer(opts, skd_client, aar, org) do
+      {:ok, partsnummer} ->
+        xml_opts = [partsnummer: partsnummer]
 
-    skattemelding_xml = SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)
-    naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap, xml_opts)
+        skattemelding_xml =
+          SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)
 
-    request_xml =
-      SkattemeldingXml.generer_request_xml(
-        skattemelding_xml,
-        naering_xml,
-        request_envelope_opts(opts, aar, org)
-      )
+        naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap, xml_opts)
 
-    SkdSkattemeldingClient.valider(skd_client, aar, org, request_xml)
+        request_xml =
+          SkattemeldingXml.generer_request_xml(
+            skattemelding_xml,
+            naering_xml,
+            request_envelope_opts(opts, aar, org)
+          )
+
+        SkdSkattemeldingClient.valider(skd_client, aar, org, request_xml)
+
+      {:error, reason} ->
+        {:error, {:partsnummer_failed, reason}}
+    end
+  end
+
+  defp resolve_partsnummer(opts, skd_client, aar, org) do
+    case Keyword.get(opts, :partsnummer) do
+      partsnummer when is_integer(partsnummer) ->
+        {:ok, partsnummer}
+
+      _ ->
+        if is_nil(skd_client) do
+          {:ok, org}
+        else
+          SkdSkattemeldingClient.hent_partsnummer(skd_client, aar, org)
+        end
+    end
   end
 
   defp request_envelope_opts(opts, aar, org) do

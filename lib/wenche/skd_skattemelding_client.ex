@@ -3,7 +3,8 @@ defmodule Wenche.SkdSkattemeldingClient do
   Skatteetaten API client for skattemeldingen (corporate tax return).
 
   Endpoints:
-  - GET /utkast/{year}/{orgNr} — fetch pre-filled draft
+  - GET /{year}/{orgNr} — fetch pre-filled draft (contains `partsnummer`)
+  - GET /utkast/{year}/{orgNr} — legacy alias for the pre-filled draft
   - POST /valider/{year}/{orgNr} — validate tax return XML
 
   Authentication uses a raw Maskinporten token (no Altinn exchange) with
@@ -11,6 +12,10 @@ defmodule Wenche.SkdSkattemeldingClient do
   authorization for the target organisation. See
   `Wenche.Maskinporten.get_skd_skattemelding_token/2`.
   """
+
+  alias Wenche.SkattemeldingXml
+
+  @forespoersel_response_ns "no:skatteetaten:fastsetting:formueinntekt:skattemeldingognaeringsspesifikasjon:forespoersel:response:v2"
 
   @bases %{
     "test" => "https://api-test.sits.no/api/skattemelding/v2",
@@ -104,6 +109,75 @@ defmodule Wenche.SkdSkattemeldingClient do
 
       {:error, reason} ->
         {:error, {:request_failed, reason}}
+    end
+  end
+
+  @doc """
+  Fetches the pre-filled skattemelding XML from Skatteetaten.
+
+  Calls `GET /{year}/{orgNr}` with `Accept: application/xml`. If the response is
+  wrapped in a `forespoerselResponse` envelope with base64-encoded `<content>`,
+  the wrapper is unpacked and the inner XML returned.
+
+  Returns `{:ok, inner_xml :: binary}` or `{:error, reason}`.
+  """
+  def hent_forhandsutfylt(%__MODULE__{} = client, year, org_nr) do
+    url = "#{client.base}/#{year}/#{org_nr}"
+
+    request_headers = [
+      {"authorization", "Bearer #{client.token}"},
+      {"accept", "application/xml"}
+    ]
+
+    case Req.get(
+           url,
+           Keyword.merge(
+             [headers: request_headers, receive_timeout: 30_000],
+             client.req_options
+           )
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
+        {:ok, maybe_unwrap_forespoersel(body)}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:utkast_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:request_failed, reason}}
+    end
+  end
+
+  @doc """
+  Fetches and extracts the company's `partsnummer` from Skatteetaten.
+
+  Convenience wrapper around `hent_forhandsutfylt/3` + `SkattemeldingXml.hent_partsnummer/1`.
+
+  Returns `{:ok, integer}` or `{:error, reason}`.
+  """
+  def hent_partsnummer(%__MODULE__{} = client, year, org_nr) do
+    with {:ok, xml} <- hent_forhandsutfylt(client, year, org_nr) do
+      SkattemeldingXml.hent_partsnummer(xml)
+    end
+  end
+
+  defp maybe_unwrap_forespoersel(xml) do
+    case Regex.run(~r{<(?:\w+:)?content[^>]*>\s*([A-Za-z0-9+/=\s]+)\s*</(?:\w+:)?content>}, xml) do
+      [_, b64] when is_binary(b64) ->
+        if String.contains?(xml, @forespoersel_response_ns) do
+          decode_b64(b64) || xml
+        else
+          xml
+        end
+
+      _ ->
+        xml
+    end
+  end
+
+  defp decode_b64(b64) do
+    case Base.decode64(String.replace(b64, ~r/\s+/, ""), ignore: :whitespace) do
+      {:ok, decoded} -> decoded
+      :error -> nil
     end
   end
 
