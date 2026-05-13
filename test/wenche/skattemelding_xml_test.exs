@@ -330,6 +330,17 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~ "<opprettetAv>Wenche</opprettetAv>"
     end
 
+    test "supports :opprettet_av override" do
+      xml =
+        SkattemeldingXml.generer_request_xml("<a/>", "<b/>",
+          inntektsaar: 2025,
+          opprettet_av: "Kontira"
+        )
+
+      assert xml =~ "<opprettetAv>Kontira</opprettetAv>"
+      refute xml =~ "<opprettetAv>Wenche</opprettetAv>"
+    end
+
     test "supports :tin (org_nummer)" do
       xml =
         SkattemeldingXml.generer_request_xml("<a/>", "<b/>", inntektsaar: 2025, tin: "933773965")

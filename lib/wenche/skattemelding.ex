@@ -720,7 +720,17 @@ defmodule Wenche.Skattemelding do
   ## Options
 
   - `:dry_run` — if true, writes XML files locally without submitting (default: false)
-  - `:dokumentidentifikator` — reference to draft (from `hent_utkast`)
+  - `:skd_client` — `SkdSkattemeldingClient` used to fetch the real partsnummer
+    and dokumentreferanse from SKD. Strongly recommended; without it the request
+    envelope falls back to using the org number as partsnummer and emits no
+    `<dokumentreferanseTilGjeldendeDokument>`, which causes SKD to reject the
+    submission with `innkommendeForespoerselManglerSporTilUtfoerende`.
+  - `:dokumentidentifikator` — reference to draft (from `hent_utkast`); used
+    only when `:skd_client` is not supplied.
+  - `:opprettet_av` — text emitted in `<opprettetAv>` to identify the
+    originating end-user system (default `"Wenche"`).
+  - `:innsendingstype`, `:innsendingsformaal` — envelope overrides; see
+    `SkattemeldingXml.generer_request_xml/3`.
 
   Returns `{:ok, inbox_url}` or `{:ok, {:dry_run, files}}` or `{:error, reason}`.
   """
@@ -859,7 +869,11 @@ defmodule Wenche.Skattemelding do
   end
 
   defp request_envelope_opts(opts, aar, org, ref) do
-    base = [inntektsaar: aar, tin: org]
+    base =
+      [inntektsaar: aar, tin: org]
+      |> maybe_put(:opprettet_av, Keyword.get(opts, :opprettet_av))
+      |> maybe_put(:innsendingstype, Keyword.get(opts, :innsendingstype))
+      |> maybe_put(:innsendingsformaal, Keyword.get(opts, :innsendingsformaal))
 
     sm_id = ref.skattemelding_id || Keyword.get(opts, :dokumentidentifikator)
     ne_id = ref.naering_id
@@ -875,6 +889,9 @@ defmodule Wenche.Skattemelding do
       Keyword.put(base, :dokumentreferanse, refs)
     end
   end
+
+  defp maybe_put(kw, _key, nil), do: kw
+  defp maybe_put(kw, key, value), do: Keyword.put(kw, key, value)
 
   defp append_ref(acc, _type, nil), do: acc
   defp append_ref(acc, _type, ""), do: acc
