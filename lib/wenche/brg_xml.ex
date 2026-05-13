@@ -65,7 +65,7 @@ defmodule Wenche.BrgXml do
           <navn orid="1">#{escape(s.navn)}</navn>
         </enhet>
         <opplysningerInnsending>
-          <noteMaskinellBehandling orid="37499">Maskinell innsending</noteMaskinellBehandling>
+          <noteMaskinellBehandling orid="37499">10</noteMaskinellBehandling>
           <systemNavn orid="39007">#{escape(system_navn)}</systemNavn>
         </opplysningerInnsending>
       </Innsender>
@@ -187,14 +187,14 @@ defmodule Wenche.BrgXml do
           </nettoFinans>
           <finansinntekt>
     #{linje("investeringDatterforetakTilknyttetSelskap", fp.utbytte_fra_datterselskap, "Utbytte fra datterselskap", "29004", "27934", "27935", ffp.utbytte_fra_datterselskap)}
-    #{linje("annenRenteinntekt", fp.andre_finansinntekter, "Andre finansinntekter", "29006", "152", "7032", ffp.andre_finansinntekter)}
+    #{linje_enkel("annenRenteinntekt", fp.andre_finansinntekter, "150", "7030", ffp.andre_finansinntekter)}
             <sumFinansinntekter>
               <aarets orid="153">#{Finansposter.sum_inntekter(fp)}</aarets>
               <fjoraarets orid="7993">#{Finansposter.sum_inntekter(ffp)}</fjoraarets>
             </sumFinansinntekter>
           </finansinntekt>
           <finanskostnad>
-    #{linje("rentekostnad", fp.rentekostnader, "Rentekostnader", "29009", "7037", "7038", ffp.rentekostnader)}
+    #{linje_enkel("rentekostnad", fp.rentekostnader, "7037", "7038", ffp.rentekostnader)}
     #{linje("annenFinanskostnad", fp.andre_finanskostnader, "Andre finanskostnader", "29011", "156", "7041", ffp.andre_finanskostnader)}
             <sumFinanskostnader>
               <aarets orid="17130">#{Finansposter.sum_kostnader(fp)}</aarets>
@@ -216,8 +216,8 @@ defmodule Wenche.BrgXml do
           </resultat>
           <overfoeringer>
             <sumOverfoeringerOgDisponeringer>
-              <aarets orid="7067">#{Resultatregnskap.aarsresultat(r)}</aarets>
-              <fjoraarets orid="7068">#{Resultatregnskap.aarsresultat(fr)}</fjoraarets>
+              <aarets orid="7071">#{Resultatregnskap.aarsresultat(r)}</aarets>
+              <fjoraarets orid="7072">#{Resultatregnskap.aarsresultat(fr)}</fjoraarets>
             </sumOverfoeringerOgDisponeringer>
           </overfoeringer>
         </resultatregnskapResultat>
@@ -237,8 +237,8 @@ defmodule Wenche.BrgXml do
                 <aarets orid="9686">#{am.aksjer_i_datterselskap}</aarets>
                 <fjoraarets orid="10289">#{fam.aksjer_i_datterselskap}</fjoraarets>
               </investeringDatterselskap>
-    #{linje("investeringAksjerAndeler", am.andre_aksjer, "Andre aksjer", "29018", "7727", "8012", fam.andre_aksjer)}
-    #{linje("annenFordring", am.langsiktige_fordringer, "Langsiktige fordringer", "29019", "6500", "7093", fam.langsiktige_fordringer)}
+    #{linje("investeringAksjerAndeler", am.andre_aksjer, "Andre aksjer", "29024", "7100", "7101", fam.andre_aksjer)}
+    #{linje("annenFordring", am.langsiktige_fordringer, "Langsiktige fordringer", "29025", "203", "27585", fam.langsiktige_fordringer)}
               <sumFinansielleAnleggsmidler>
                 <aarets orid="5267">#{Anleggsmidler.sum(am)}</aarets>
                 <fjoraarets orid="8014">#{Anleggsmidler.sum(fam)}</fjoraarets>
@@ -279,7 +279,7 @@ defmodule Wenche.BrgXml do
           <balanseEgenkapitalInnskuttOpptjentEgenkapital>
             <innskuttEgenkapital>
     #{linje("selskapskapital", ek.aksjekapital, "Aksjekapital", "29032", "20488", "20489", fek.aksjekapital)}
-    #{linje("overkursfond", ek.overkursfond, "Overkursfond", "29033", "2585", "7135", fek.overkursfond)}
+    #{linje_enkel("overkursfond", ek.overkursfond, "2585", "7135", fek.overkursfond)}
               <sumInnskuttEgenkapital>
                 <aarets orid="3730">#{sum_innskutt_ek}</aarets>
                 <fjoraarets orid="9984">#{fek.aksjekapital + fek.overkursfond}</fjoraarets>
@@ -308,7 +308,7 @@ defmodule Wenche.BrgXml do
                 <fjoraarets orid="7156">#{LangsiktigGjeld.sum(flg)}</fjoraarets>
               </sumLangsiktigGjeld>
               <annenLangsiktigGjeld>
-    #{linje("langsiktigKonserngjeld", lg.laan_fra_aksjonaer, "Lån fra aksjonær", "29035", "2256", "7152", flg.laan_fra_aksjonaer)}
+    #{linje_enkel("langsiktigKonserngjeld", lg.laan_fra_aksjonaer, "2256", "7152", flg.laan_fra_aksjonaer)}
     #{linje("oevrigLangsiktigGjeld", lg.andre_langsiktige_laan, "Andre langsiktige lån", "29036", "242", "7155", flg.andre_langsiktige_laan)}
                 <sumAnnenLangsiktigGjeld>
                   <aarets orid="25019">#{LangsiktigGjeld.sum(lg)}</aarets>
@@ -317,7 +317,7 @@ defmodule Wenche.BrgXml do
               </annenLangsiktigGjeld>
             </balanseGjeldAvsetningerForpliktelserAnnenLangsiktigGjeld>
             <balanseKortsiktigGjeld>
-    #{linje("leverandoergjeld", kg.leverandoergjeld, "Leverandørgjeld", "29037", "220", "7162", fkg.leverandoergjeld)}
+    #{linje_enkel("leverandoergjeld", kg.leverandoergjeld, "220", "7162", fkg.leverandoergjeld)}
     #{linje("skyldigeOffentligeAvgifter", kg.skyldige_offentlige_avgifter, "Skyldige offentlige avgifter", "29039", "225", "7170", fkg.skyldige_offentlige_avgifter)}
     #{linje("annenKortsiktigGjeld", kg.annen_kortsiktig_gjeld, "Annen kortsiktig gjeld", "29040", "236", "7182", fkg.annen_kortsiktig_gjeld)}
               <sumKortsiktigGjeld>
@@ -347,6 +347,22 @@ defmodule Wenche.BrgXml do
       """
               <#{tag} altinnRowId="#{row_id}">
                 <beskrivelse orid="#{orid_besk}">#{escape(besk)}</beskrivelse>
+                <aarets orid="#{orid_aarets}">#{verdi}</aarets>
+                <fjoraarets orid="#{orid_fjor}">#{fjor_verdi}</fjoraarets>
+              </#{tag}>
+      """
+    end
+  end
+
+  # Single-occurrence elements that XSD defines without altinnRowId/beskrivelse
+  # (e.g. rentekostnad, langsiktigKonserngjeld, overkursfond, leverandoergjeld,
+  # annenRenteinntekt). Only emitted when value or prior-year value is non-zero.
+  defp linje_enkel(tag, verdi, orid_aarets, orid_fjor, fjor_verdi) do
+    if verdi == 0 and fjor_verdi == 0 do
+      ""
+    else
+      """
+              <#{tag}>
                 <aarets orid="#{orid_aarets}">#{verdi}</aarets>
                 <fjoraarets orid="#{orid_fjor}">#{fjor_verdi}</fjoraarets>
               </#{tag}>
