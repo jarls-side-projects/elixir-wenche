@@ -85,7 +85,7 @@ defmodule Wenche.SkdSkattemeldingClient do
 
     valider_headers = [
       {"authorization", "Bearer #{client.token}"},
-      {"content-type", "application/xml"},
+      {"content-type", "application/xml;charset=UTF-8"},
       {"accept", "application/xml;charset=UTF-8"}
     ]
 
