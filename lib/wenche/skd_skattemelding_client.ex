@@ -6,7 +6,10 @@ defmodule Wenche.SkdSkattemeldingClient do
   - GET /utkast/{year}/{orgNr} — fetch pre-filled draft
   - POST /valider/{year}/{orgNr} — validate tax return XML
 
-  Authentication uses an Altinn token (Maskinporten exchanged).
+  Authentication uses a raw Maskinporten token (no Altinn exchange) with
+  the `skatteetaten:formueinntekt/skattemelding` scope and systemuser
+  authorization for the target organisation. See
+  `Wenche.Maskinporten.get_skd_skattemelding_token/2`.
   """
 
   @bases %{
