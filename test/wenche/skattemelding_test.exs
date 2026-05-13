@@ -264,4 +264,78 @@ defmodule Wenche.SkattemeldingTest do
       assert result.balanse.i_balanse == true
     end
   end
+
+  describe "valider/4 fetches partsnummer from Skatteetaten" do
+    @req_opts [plug: {Req.Test, Wenche.SkdSkattemeldingClient}, retry: false]
+
+    test "calls hent_partsnummer first, then valider with that partsnummer in XML" do
+      utkast_xml =
+        ~s|<?xml version="1.0"?><skattemelding xmlns="urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5"><partsnummer>9001</partsnummer><inntektsaar>2025</inntektsaar></skattemelding>|
+
+      ref = make_ref()
+
+      Req.Test.stub(Wenche.SkdSkattemeldingClient, fn conn ->
+        case conn.method do
+          "GET" ->
+            assert conn.request_path =~ "/2025/912345678"
+            refute conn.request_path =~ "/utkast/"
+
+            conn
+            |> Plug.Conn.put_resp_content_type("application/xml")
+            |> Plug.Conn.resp(200, utkast_xml)
+
+          "POST" ->
+            assert conn.request_path =~ "/valider/2025/912345678"
+            {:ok, body, conn} = Plug.Conn.read_body(conn)
+            send(self(), {ref, body})
+            Req.Test.json(conn, %{"ok" => true})
+        end
+      end)
+
+      skd_client =
+        Wenche.SkdSkattemeldingClient.new("token", env: "test", req_options: @req_opts)
+
+      assert {:ok, %{"ok" => true}} =
+               Skattemelding.valider(sample_regnskap(), %SkattemeldingKonfig{}, skd_client)
+
+      assert_received {^ref, posted_body}
+      assert posted_body =~ "skattemeldingOgNaeringsspesifikasjonRequest"
+
+      decoded =
+        Regex.scan(~r{<content>([^<]+)</content>}, posted_body)
+        |> Enum.map_join("\n", fn [_, b64] -> Base.decode64!(b64) end)
+
+      assert decoded =~ "<partsnummer>9001</partsnummer>"
+      assert decoded =~ "<partsreferanse>9001</partsreferanse>"
+      refute decoded =~ "<partsnummer>912345678</partsnummer>"
+    end
+
+    test "returns {:error, {:partsnummer_failed, _}} when utkast fails" do
+      Req.Test.stub(Wenche.SkdSkattemeldingClient, fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      skd_client =
+        Wenche.SkdSkattemeldingClient.new("token", env: "test", req_options: @req_opts)
+
+      assert {:error, {:partsnummer_failed, _}} =
+               Skattemelding.valider(sample_regnskap(), %SkattemeldingKonfig{}, skd_client)
+    end
+
+    test "honors explicit :partsnummer opt without fetching utkast" do
+      Req.Test.stub(Wenche.SkdSkattemeldingClient, fn conn ->
+        refute conn.method == "GET"
+        assert conn.request_path =~ "/valider/"
+        Req.Test.json(conn, %{"ok" => true})
+      end)
+
+      skd_client =
+        Wenche.SkdSkattemeldingClient.new("token", env: "test", req_options: @req_opts)
+
+      assert {:ok, _} =
+               Skattemelding.valider(sample_regnskap(), %SkattemeldingKonfig{}, skd_client,
+                 partsnummer: 7777
+               )
+    end
+  end
 end
