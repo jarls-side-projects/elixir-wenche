@@ -209,6 +209,22 @@ defmodule Wenche.Maskinporten do
   end
 
   @doc """
+  Obtains a Maskinporten token with skattemelding scope and system user
+  authorization for the given organisation.
+
+  SKD's skattemelding API uses the Maskinporten token directly (no Altinn
+  exchange). Requires that scope `skatteetaten:formueinntekt/skattemelding`
+  has been granted by Skatteetaten for the client.
+
+  Returns `{:ok, maskinporten_token}` or `{:error, reason}`.
+  """
+  def get_skd_skattemelding_token(config, org_nummer) do
+    with {:ok, jwt} <- build_jwt_grant(config, @skattemelding_scope, org_nummer: org_nummer) do
+      exchange_jwt(config, jwt)
+    end
+  end
+
+  @doc """
   Returns the default scopes for instance operations.
   """
   def default_scopes, do: @scopes
