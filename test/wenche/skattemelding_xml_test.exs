@@ -212,6 +212,20 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~ ~r/<balanseverdi>\s*<id>/
     end
 
+    test "forekomst id equals the kodeliste kode (Skatteetaten idAvvikerFraKrav rule)" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      # Skatteetaten validator requires <id> to equal the resultatOgBalanseregnskapstype kode.
+      # A mismatch produces avvikstype=idAvvikerFraKrav.
+      for kode <- ["3200", "6700", "8090", "8150", "1350", "1920", "2000", "2050", "2990"] do
+        if xml =~ ">#{kode}<" do
+          assert xml =~
+                   ~r{<id>#{kode}</id>\s*(?:<beloep>|<type>\s*<resultatOgBalanseregnskapstype>#{kode})},
+                 "expected <id>#{kode}</id> alongside resultatOgBalanseregnskapstype #{kode}"
+        end
+      end
+    end
+
     test "uses 2025 kodeliste codes" do
       xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
 

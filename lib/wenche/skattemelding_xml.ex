@@ -255,7 +255,7 @@ defmodule Wenche.SkattemeldingXml do
                   <beloep>#{format_beloep(beloep)}</beloep>
                 </beloep>
               </beloep>
-              <id>#{uuid()}</id>
+              <id>#{kode}</id>
               <type>
                 <resultatOgBalanseregnskapstype>#{kode}</resultatOgBalanseregnskapstype>
               </type>
@@ -268,7 +268,7 @@ defmodule Wenche.SkattemeldingXml do
   defp balanseforekomst(child_tag, beloep, kode) do
     """
             <#{child_tag}>
-              <id>#{uuid()}</id>
+              <id>#{kode}</id>
               <beloep>
                 <beloep>
                   <beloep>#{format_beloep(beloep)}</beloep>
@@ -568,10 +568,6 @@ defmodule Wenche.SkattemeldingXml do
       [_, value] -> {:ok, String.to_integer(value)}
       _ -> {:error, :partsnummer_not_found}
     end
-  end
-
-  defp uuid do
-    UUID.uuid4()
   end
 
   defp format_beloep(beloep) when is_integer(beloep) do
