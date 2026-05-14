@@ -762,6 +762,7 @@ defmodule Wenche.Skattemelding do
     xml_opts =
       [partsnummer: ref.partsnummer]
       |> maybe_forward_opt(opts, :aksjespesifikasjon)
+      |> maybe_forward_opt(opts, :permanent_forskjeller)
 
     skattemelding_xml = SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)
     naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap, xml_opts)
@@ -828,6 +829,7 @@ defmodule Wenche.Skattemelding do
         xml_opts =
           [partsnummer: ref.partsnummer]
           |> maybe_forward_opt(opts, :aksjespesifikasjon)
+          |> maybe_forward_opt(opts, :permanent_forskjeller)
 
         skattemelding_xml =
           SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)

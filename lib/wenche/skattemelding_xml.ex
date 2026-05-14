@@ -351,6 +351,12 @@ defmodule Wenche.SkattemeldingXml do
 
   - `:partsnummer` — Skatteetaten's integer ID. Defaults to
     `aarsregnskap.selskap.org_nummer`.
+  - `:permanent_forskjeller` — list of maps emitted as
+    `<forskjellMellomRegnskapsmessigOgSkattemessigVerdi><permanentForskjell>…`.
+    Required for SKD to apply fritaksmetoden — without these explicit
+    "tilbakeføring av utbytte" / "treprosent" / "gevinst-fradrag" /
+    "tap-tillegg" declarations, SKD taxes the full regnskapsmessig income.
+    See `generer_permanent_forskjell_block/1` for the expected shape.
   """
   def generer_naeringsspesifikasjon_xml(%Aarsregnskap{} = regnskap, opts \\ []) do
     partsnummer = Keyword.get(opts, :partsnummer, regnskap.selskap.org_nummer)
@@ -358,6 +364,11 @@ defmodule Wenche.SkattemeldingXml do
     r = regnskap.resultatregnskap
     b = regnskap.balanse
     skal_revisor = if regnskap.revideres, do: "true", else: "false"
+
+    permanent_forskjeller =
+      opts
+      |> Keyword.get(:permanent_forskjeller, [])
+      |> generer_permanent_forskjell_block()
 
     parts =
       [
@@ -367,6 +378,7 @@ defmodule Wenche.SkattemeldingXml do
         "  <inntektsaar>#{aar}</inntektsaar>",
         resultatregnskap_block(r),
         balanseregnskap_block(b),
+        permanent_forskjeller,
         virksomhet_block(aar),
         "  <skalBekreftesAvRevisor>#{skal_revisor}</skalBekreftesAvRevisor>",
         "</naeringsspesifikasjon>"
@@ -374,6 +386,70 @@ defmodule Wenche.SkattemeldingXml do
       |> Enum.reject(&(&1 == ""))
 
     Enum.join(parts, "\n")
+  end
+
+  @doc """
+  Generates a `<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>` block
+  from a list of permanent-forskjell maps. Returns `""` for an empty list.
+
+  Each entry must include:
+
+    * `:type` — `tekniskNavn` from the 2025 permanentForskjellstype kodeliste.
+      Examples relevant to fritaksmetoden:
+      `:tilbakefoeringAvInntektsfoertUtbytte` (0815, fradrag),
+      `:skattepliktigDelAvUtbytterOgUtdelinger` (0653, tillegg = 3 %),
+      `:regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter`
+        (0833, fradrag),
+      `:regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter`
+        (0633, tillegg).
+    * `:beloep` — integer NOK (always positive; the kodeliste's
+      `kategori` determines whether SKD treats it as tillegg or fradrag).
+    * `:beskrivelse` — optional free text.
+
+  Entries with `:beloep <= 0` are dropped — SKD rejects zero-valued
+  permanent forskjeller as invalid.
+  """
+  def generer_permanent_forskjell_block([]), do: ""
+
+  def generer_permanent_forskjell_block(entries) when is_list(entries) do
+    forekomster =
+      entries
+      |> Enum.filter(&positive_beloep?/1)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {entry, idx} -> permanent_forskjell(entry, idx) end)
+      |> Enum.join("\n")
+
+    if forekomster == "" do
+      ""
+    else
+      "  <forskjellMellomRegnskapsmessigOgSkattemessigVerdi>\n" <>
+        forekomster <>
+        "\n  </forskjellMellomRegnskapsmessigOgSkattemessigVerdi>"
+    end
+  end
+
+  defp positive_beloep?(%{beloep: b}) when is_integer(b), do: b > 0
+  defp positive_beloep?(_), do: false
+
+  defp permanent_forskjell(%{type: type, beloep: beloep} = entry, idx)
+       when is_atom(type) or is_binary(type) do
+    type_name = type |> to_string()
+
+    beskrivelse =
+      case Map.get(entry, :beskrivelse) do
+        nil -> ""
+        "" -> ""
+        text -> "\n      <beskrivelse><tekst>#{escape(text)}</tekst></beskrivelse>"
+      end
+
+    """
+        <permanentForskjell>
+          <id>#{idx}</id>
+          <permanentForskjellstype><permanentForskjellstype>#{type_name}</permanentForskjellstype></permanentForskjellstype>
+          <beloep><beloep><beloep>#{beloep}</beloep></beloep></beloep>#{beskrivelse}
+        </permanentForskjell>\
+    """
+    |> String.trim_trailing()
   end
 
   defp resultatregnskap_block(r) do
