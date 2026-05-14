@@ -86,7 +86,8 @@ defmodule Wenche.SkdSkattemeldingClientTest do
 
   describe "hent_forhandsutfylt/3 and hent_partsnummer/3" do
     test "returns inner XML when response is raw skattemelding XML" do
-      raw_xml = ~s(<?xml version="1.0"?><skattemelding xmlns="urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5"><partsnummer>424242</partsnummer><inntektsaar>2024</inntektsaar></skattemelding>)
+      raw_xml =
+        ~s(<?xml version="1.0"?><skattemelding xmlns="urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5"><partsnummer>424242</partsnummer><inntektsaar>2024</inntektsaar></skattemelding>)
 
       Req.Test.stub(Wenche.SkdSkattemeldingClient, fn conn ->
         assert conn.method == "GET"
@@ -111,11 +112,13 @@ defmodule Wenche.SkdSkattemeldingClientTest do
     end
 
     test "unwraps forespoersel response envelope" do
-      inner_xml = ~s(<?xml version="1.0"?><skattemelding xmlns="urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5"><partsnummer>4711</partsnummer><inntektsaar>2024</inntektsaar></skattemelding>)
+      inner_xml =
+        ~s(<?xml version="1.0"?><skattemelding xmlns="urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5"><partsnummer>4711</partsnummer><inntektsaar>2024</inntektsaar></skattemelding>)
 
       inner_b64 = Base.encode64(inner_xml)
 
-      wrapper = ~s|<?xml version="1.0"?><forespoerselResponse xmlns="no:skatteetaten:fastsetting:formueinntekt:skattemeldingognaeringsspesifikasjon:forespoersel:response:v2"><dokumentidentifikator>doc-1</dokumentidentifikator><content>#{inner_b64}</content></forespoerselResponse>|
+      wrapper =
+        ~s|<?xml version="1.0"?><forespoerselResponse xmlns="no:skatteetaten:fastsetting:formueinntekt:skattemeldingognaeringsspesifikasjon:forespoersel:response:v2"><dokumentidentifikator>doc-1</dokumentidentifikator><content>#{inner_b64}</content></forespoerselResponse>|
 
       Req.Test.stub(Wenche.SkdSkattemeldingClient, fn conn ->
         conn

@@ -71,7 +71,9 @@ defmodule Wenche.MvaMeldingXmlTest do
     test "includes correct period" do
       xml = MvaMeldingXml.generer_konvolutt_xml(sample_mva_data())
 
-      assert xml =~ "<skattleggingsperiodeToMaaneder>januar-februar</skattleggingsperiodeToMaaneder>"
+      assert xml =~
+               "<skattleggingsperiodeToMaaneder>januar-februar</skattleggingsperiodeToMaaneder>"
+
       assert xml =~ "<aar>2025</aar>"
     end
 
@@ -138,7 +140,9 @@ defmodule Wenche.MvaMeldingXmlTest do
     test "includes skattleggingsperiode" do
       xml = MvaMeldingXml.generer_melding_xml(sample_mva_data())
 
-      assert xml =~ "<skattleggingsperiodeToMaaneder>januar-februar</skattleggingsperiodeToMaaneder>"
+      assert xml =~
+               "<skattleggingsperiodeToMaaneder>januar-februar</skattleggingsperiodeToMaaneder>"
+
       assert xml =~ "<aar>2025</aar>"
     end
 
@@ -170,7 +174,8 @@ defmodule Wenche.MvaMeldingXmlTest do
     test "includes skattepliktig organisasjonsnummer" do
       xml = MvaMeldingXml.generer_melding_xml(sample_mva_data())
 
-      assert xml =~ "<skattepliktig><organisasjonsnummer>912345678</organisasjonsnummer></skattepliktig>"
+      assert xml =~
+               "<skattepliktig><organisasjonsnummer>912345678</organisasjonsnummer></skattepliktig>"
     end
 
     test "includes meldingskategori" do

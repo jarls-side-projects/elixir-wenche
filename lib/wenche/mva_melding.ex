@@ -116,7 +116,8 @@ defmodule Wenche.MvaMelding do
       {"accept", "application/json"}
     ]
 
-    case Req.post(base_url,
+    case Req.post(
+           base_url,
            Keyword.merge(
              [body: melding_xml, headers: headers, receive_timeout: 30_000],
              req_options
