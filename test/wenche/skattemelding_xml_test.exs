@@ -136,6 +136,170 @@ defmodule Wenche.SkattemeldingXmlTest do
 
       assert xml =~ "<partsnummer>4711</partsnummer>"
     end
+
+    test "emits spesifikasjonAvForholdRelevanteForBeskatning when :aksjespesifikasjon is set" do
+      holding = %{
+        type: :aksje_i_aksjonaerregisteret,
+        selskapets_navn: "Witted Minicorp I AS",
+        selskapets_organisasjonsnummer: "933592731",
+        landkode: "NO",
+        er_omfattet_av_fritaksmetoden: true,
+        aksjeklasse: "B",
+        antall_aksjer: 0,
+        utbytte: 50_429,
+        gevinst_ved_realisasjon_av_aksje: 71,
+        tap_ved_realisasjon_av_aksje: 0
+      }
+
+      xml =
+        SkattemeldingXml.generer_skattemelding_xml(
+          sample_regnskap(),
+          %SkattemeldingKonfig{},
+          aksjespesifikasjon: [holding]
+        )
+
+      assert xml =~ "<spesifikasjonAvForholdRelevanteForBeskatning>"
+      assert xml =~ "<aksjeIAksjonaerregisteret>"
+      assert xml =~ "<id>1</id>"
+
+      assert xml =~
+               "<selskapetsNavn><organisasjonsnavn>Witted Minicorp I AS</organisasjonsnavn></selskapetsNavn>"
+
+      assert xml =~
+               "<selskapetsOrganisasjonsnummer><organisasjonsnummer>933592731</organisasjonsnummer></selskapetsOrganisasjonsnummer>"
+
+      assert xml =~ "<landkode><landkode>NO</landkode></landkode>"
+
+      assert xml =~
+               "<erOmfattetAvFritaksmetoden><boolsk>true</boolsk></erOmfattetAvFritaksmetoden>"
+
+      assert xml =~ "<aksjeklasse><aksjeklasse>B</aksjeklasse></aksjeklasse>"
+      assert xml =~ "<utbytte><beloepSomHeltall>50429</beloepSomHeltall></utbytte>"
+
+      assert xml =~
+               "<gevinstVedRealisasjonAvAksje><beloepSomHeltall>71</beloepSomHeltall></gevinstVedRealisasjonAvAksje>"
+
+      # antall is emitted even at 0; tap is suppressed at 0
+      assert xml =~ "<antallAksjer><antall>0</antall></antallAksjer>"
+      refute xml =~ "<tapVedRealisasjonAvAksje>"
+    end
+
+    test "omits spesifikasjonAvForholdRelevanteForBeskatning when list is empty" do
+      xml = SkattemeldingXml.generer_skattemelding_xml(sample_regnskap(), %SkattemeldingKonfig{})
+
+      refute xml =~ "spesifikasjonAvForholdRelevanteForBeskatning"
+    end
+
+    test "places spesifikasjonAvForholdRelevanteForBeskatning after inntektOgUnderskudd per XSD" do
+      holding = %{
+        type: :aksje_i_aksjonaerregisteret,
+        selskapets_navn: "Witted",
+        selskapets_organisasjonsnummer: "933592731",
+        er_omfattet_av_fritaksmetoden: true,
+        utbytte: 50_429
+      }
+
+      xml =
+        SkattemeldingXml.generer_skattemelding_xml(
+          sample_regnskap(),
+          %SkattemeldingKonfig{underskudd_til_fremfoering: 1_000},
+          aksjespesifikasjon: [holding]
+        )
+
+      inntekt_idx = :binary.match(xml, "<inntektOgUnderskudd>") |> elem(0)
+      spec_idx = :binary.match(xml, "<spesifikasjonAvForholdRelevanteForBeskatning>") |> elem(0)
+      assert spec_idx > inntekt_idx
+    end
+  end
+
+  describe "generer_spesifikasjon_av_forhold_relevante_for_beskatning/1" do
+    alias Wenche.SkattemeldingXml, as: SXML
+
+    test "returns empty string for empty list" do
+      assert SXML.generer_spesifikasjon_av_forhold_relevante_for_beskatning([]) == ""
+    end
+
+    test "emits aksjeIkkeIAksjonaerregisteret with custodian fields" do
+      holding = %{
+        type: :aksje_ikke_i_aksjonaerregisteret,
+        kontofoerers_navn: "DNB Markets",
+        kontonummer: "12345678901",
+        selskapets_navn: "Acme Inc",
+        landkode: "US",
+        er_omfattet_av_fritaksmetoden: false,
+        antall_aksjer: 100,
+        utbytte: 5_000
+      }
+
+      xml = SXML.generer_spesifikasjon_av_forhold_relevante_for_beskatning([holding])
+
+      assert xml =~ "<aksjeIkkeIAksjonaerregisteret>"
+
+      assert xml =~
+               "<kontofoerersNavn><organisasjonsnavn>DNB Markets</organisasjonsnavn></kontofoerersNavn>"
+
+      assert xml =~ "<kontonummer><tekst>12345678901</tekst></kontonummer>"
+
+      assert xml =~
+               "<erOmfattetAvFritaksmetoden><boolsk>false</boolsk></erOmfattetAvFritaksmetoden>"
+
+      assert xml =~ "<landkode><landkode>US</landkode></landkode>"
+      refute xml =~ "selskapetsOrganisasjonsnummer"
+    end
+
+    test "emits verdipapirfond with aksjedel/rentedel realisasjoner" do
+      holding = %{
+        type: :verdipapirfond,
+        fondets_navn: "KLP AksjeNorden",
+        fondets_organisasjonsnummer: "981554242",
+        landkode: "NO",
+        er_omfattet_av_fritaksmetoden: true,
+        antall_andeler: 42,
+        utbytte: 1_200,
+        gevinst_ved_realisasjon_av_andel_i_aksjedel: 500
+      }
+
+      xml = SXML.generer_spesifikasjon_av_forhold_relevante_for_beskatning([holding])
+
+      assert xml =~ "<verdipapirfond>"
+
+      assert xml =~
+               "<fondetsNavn><organisasjonsnavn>KLP AksjeNorden</organisasjonsnavn></fondetsNavn>"
+
+      assert xml =~
+               "<gevinstVedRealisasjonAvAndelIAksjedel><beloepSomHeltall>500</beloepSomHeltall></gevinstVedRealisasjonAvAndelIAksjedel>"
+    end
+
+    test "assigns 1-based ids in order received" do
+      holdings = [
+        %{type: :aksje_i_aksjonaerregisteret, selskapets_navn: "A"},
+        %{type: :aksje_i_aksjonaerregisteret, selskapets_navn: "B"}
+      ]
+
+      xml = SXML.generer_spesifikasjon_av_forhold_relevante_for_beskatning(holdings)
+
+      [_, a_id] =
+        Regex.run(
+          ~r{<organisasjonsnavn>A</organisasjonsnavn></selskapetsNavn>.*?<id>(\d+)</id>}s,
+          xml
+        ) || ["", "?"]
+
+      # The id is BEFORE the navn in the forekomst — look at the first forekomst's id.
+      [_, first_id, second_id] =
+        Regex.run(
+          ~r{<aksjeIAksjonaerregisteret>\s*<id>(\d+)</id>.*?<aksjeIAksjonaerregisteret>\s*<id>(\d+)</id>}s,
+          xml
+        )
+
+      assert first_id == "1"
+      assert second_id == "2"
+      _ = a_id
+    end
+
+    test "skips unknown :type silently" do
+      assert SXML.generer_spesifikasjon_av_forhold_relevante_for_beskatning([%{type: :ukjent}]) ==
+               ""
+    end
   end
 
   describe "generer_naeringsspesifikasjon_xml/2" do
@@ -434,6 +598,52 @@ defmodule Wenche.SkattemeldingXmlTest do
         SkattemeldingXml.generer_request_xml(sm, ne, inntektsaar: 2025, tin: "912345678")
 
       assert_xml_valid!(req, "#{@xsd_dir}/skattemeldingognaeringsspesifikasjonrequest_v2.xsd")
+    end
+
+    @tag :xsd
+    test "skattemelding with aksjespesifikasjon validates (mixed forekomst types)" do
+      holdings = [
+        %{
+          type: :aksje_i_aksjonaerregisteret,
+          selskapets_navn: "Witted Minicorp I AS",
+          selskapets_organisasjonsnummer: "933592731",
+          landkode: "NO",
+          er_omfattet_av_fritaksmetoden: true,
+          aksjeklasse: "B",
+          antall_aksjer: 30,
+          utbytte: 50_429,
+          gevinst_ved_realisasjon_av_aksje: 71
+        },
+        %{
+          type: :aksje_ikke_i_aksjonaerregisteret,
+          kontofoerers_navn: "DNB Markets",
+          kontonummer: "12345678901",
+          selskapets_navn: "Acme Inc",
+          landkode: "US",
+          er_omfattet_av_fritaksmetoden: false,
+          antall_aksjer: 100,
+          utbytte: 5_000
+        },
+        %{
+          type: :verdipapirfond,
+          fondets_navn: "KLP AksjeNorden",
+          fondets_organisasjonsnummer: "981554242",
+          landkode: "NO",
+          er_omfattet_av_fritaksmetoden: true,
+          antall_andeler: 42,
+          utbytte: 1_200,
+          gevinst_ved_realisasjon_av_andel_i_aksjedel: 500
+        }
+      ]
+
+      xml =
+        SkattemeldingXml.generer_skattemelding_xml(
+          sample_regnskap(),
+          %SkattemeldingKonfig{underskudd_til_fremfoering: 13_266},
+          aksjespesifikasjon: holdings
+        )
+
+      assert_xml_valid!(xml, "#{@xsd_dir}/skattemeldingUpersonlig_v5_ekstern.xsd")
     end
 
     defp assert_xml_valid!(xml, schema_path) do

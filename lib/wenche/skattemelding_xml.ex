@@ -79,6 +79,12 @@ defmodule Wenche.SkattemeldingXml do
   - `:fremfoert_underskudd` — loss carryforward from prior years (integer kroner).
     Defaults to `konfig.underskudd_til_fremfoering`. Element is emitted only
     when value is > 0.
+  - `:aksjespesifikasjon` — list of holding maps emitted as
+    `<spesifikasjonAvForholdRelevanteForBeskatning>`. See
+    `generer_spesifikasjon_av_forhold_relevante_for_beskatning/1` for the
+    expected map shape. Required for SKD to apply fritaksmetoden to dividends
+    and gains on aksje/verdipapir holdings — without it, SKD taxes the full
+    income.
   """
   def generer_skattemelding_xml(%Aarsregnskap{} = regnskap, konfig, opts \\ []) do
     partsnummer = Keyword.get(opts, :partsnummer, regnskap.selskap.org_nummer)
@@ -107,17 +113,234 @@ defmodule Wenche.SkattemeldingXml do
         ""
       end
 
+    aksjespesifikasjon =
+      opts
+      |> Keyword.get(:aksjespesifikasjon, [])
+      |> generer_spesifikasjon_av_forhold_relevante_for_beskatning()
+
     """
     <?xml version="1.0" encoding="UTF-8"?>
     <skattemelding xmlns="#{@skattemelding_ns}">
       <partsnummer>#{partsnummer}</partsnummer>
       <inntektsaar>#{aar}</inntektsaar>
     #{inntekt_og_underskudd}
+    #{aksjespesifikasjon}
     </skattemelding>
     """
     |> String.trim()
     |> remove_blank_lines()
   end
+
+  @doc """
+  Generates a `<spesifikasjonAvForholdRelevanteForBeskatning>` block from a
+  list of holding maps. Returns an empty string for an empty list.
+
+  Each holding map must include `:type`, which selects the forekomst variant:
+
+    * `:aksje_i_aksjonaerregisteret` — Norwegian AS in aksjonærregisteret.
+      Expected keys: `:selskapets_navn`, `:selskapets_organisasjonsnummer`,
+      `:landkode`, `:er_omfattet_av_fritaksmetoden`, `:aksjeklasse`,
+      `:isinnummer`, `:antall_aksjer`, `:utbytte`,
+      `:gevinst_ved_realisasjon_av_aksje`, `:tap_ved_realisasjon_av_aksje`.
+
+    * `:aksje_ikke_i_aksjonaerregisteret` — foreign shares held via custodian.
+      Adds `:kontofoerers_navn`, `:kontonummer`, `:finansproduktidentifikator`,
+      `:finansproduktidentifikatortype`.
+
+    * `:verdipapirfond` — mutual fund. Expected keys: `:fondets_navn`,
+      `:fondets_organisasjonsnummer`, `:landkode`,
+      `:er_omfattet_av_fritaksmetoden`, `:isinnummer`, `:antall_andeler`,
+      `:utbytte`, `:renteinntekt`,
+      `:gevinst_ved_realisasjon_av_andel_i_aksjedel`,
+      `:tap_ved_realisasjon_av_andel_i_aksjedel`,
+      `:gevinst_ved_realisasjon_av_andel_i_rentedel`,
+      `:tap_ved_realisasjon_av_andel_i_rentedel`.
+
+  All numeric fields are emitted only when non-nil. `id` is assigned by
+  index (1-based) in the order received.
+  """
+  def generer_spesifikasjon_av_forhold_relevante_for_beskatning([]), do: ""
+
+  def generer_spesifikasjon_av_forhold_relevante_for_beskatning(holdings)
+      when is_list(holdings) do
+    # Forekomster must appear in XSD-declared order within
+    # SpesifikasjonAvForholdRelevanteForBeskatning. Sort holdings by this order
+    # before emission while keeping each group's input order stable.
+    forekomster =
+      holdings
+      |> Enum.with_index(1)
+      |> Enum.sort_by(fn {%{type: t}, idx} -> {xsd_order(t), idx} end)
+      |> Enum.map(fn {holding, idx} -> forekomst(holding, idx) end)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+
+    if forekomster == "" do
+      ""
+    else
+      "  <spesifikasjonAvForholdRelevanteForBeskatning>\n" <>
+        forekomster <>
+        "\n  </spesifikasjonAvForholdRelevanteForBeskatning>"
+    end
+  end
+
+  # XSD child order within <spesifikasjonAvForholdRelevanteForBeskatning>.
+  defp xsd_order(:aksje_i_aksjonaerregisteret), do: 1
+  defp xsd_order(:verdipapirfond), do: 2
+  defp xsd_order(:aksje_ikke_i_aksjonaerregisteret), do: 3
+  defp xsd_order(_), do: 99
+
+  defp forekomst(%{type: :aksje_i_aksjonaerregisteret} = h, idx) do
+    children =
+      [
+        "<id>#{idx}</id>",
+        wrap_navn("selskapetsNavn", h[:selskapets_navn]),
+        wrap_orgnr("selskapetsOrganisasjonsnummer", h[:selskapets_organisasjonsnummer]),
+        wrap_landkode(h[:landkode]),
+        wrap_boolsk("erOmfattetAvFritaksmetoden", h[:er_omfattet_av_fritaksmetoden]),
+        wrap_aksjeklasse(h[:aksjeklasse]),
+        wrap_isin(h[:isinnummer]),
+        wrap_antall("antallAksjer", h[:antall_aksjer]),
+        wrap_beloep_heltall("utbytte", h[:utbytte]),
+        wrap_beloep_heltall(
+          "gevinstVedRealisasjonAvAksje",
+          h[:gevinst_ved_realisasjon_av_aksje]
+        ),
+        wrap_beloep_heltall("tapVedRealisasjonAvAksje", h[:tap_ved_realisasjon_av_aksje])
+      ]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(&("      " <> &1))
+      |> Enum.join("\n")
+
+    "    <aksjeIAksjonaerregisteret>\n" <>
+      children <>
+      "\n    </aksjeIAksjonaerregisteret>"
+  end
+
+  defp forekomst(%{type: :aksje_ikke_i_aksjonaerregisteret} = h, idx) do
+    children =
+      [
+        "<id>#{idx}</id>",
+        wrap_navn("kontofoerersNavn", h[:kontofoerers_navn]),
+        wrap_tekst("kontonummer", h[:kontonummer]),
+        wrap_navn("selskapetsNavn", h[:selskapets_navn]),
+        wrap_orgnr("selskapetsOrganisasjonsnummer", h[:selskapets_organisasjonsnummer]),
+        wrap_tekst("finansproduktidentifikator", h[:finansproduktidentifikator]),
+        wrap_tekst("finansproduktidentifikatortype", h[:finansproduktidentifikatortype]),
+        wrap_landkode(h[:landkode]),
+        wrap_boolsk("erOmfattetAvFritaksmetoden", h[:er_omfattet_av_fritaksmetoden]),
+        wrap_desimaltall("antallAksjer", h[:antall_aksjer]),
+        wrap_beloep_heltall("utbytte", h[:utbytte]),
+        wrap_beloep_heltall(
+          "gevinstVedRealisasjonAvAksje",
+          h[:gevinst_ved_realisasjon_av_aksje]
+        ),
+        wrap_beloep_heltall("tapVedRealisasjonAvAksje", h[:tap_ved_realisasjon_av_aksje])
+      ]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(&("      " <> &1))
+      |> Enum.join("\n")
+
+    "    <aksjeIkkeIAksjonaerregisteret>\n" <>
+      children <>
+      "\n    </aksjeIkkeIAksjonaerregisteret>"
+  end
+
+  defp forekomst(%{type: :verdipapirfond} = h, idx) do
+    children =
+      [
+        "<id>#{idx}</id>",
+        wrap_navn("fondetsNavn", h[:fondets_navn]),
+        wrap_orgnr("fondetsOrganisasjonsnummer", h[:fondets_organisasjonsnummer]),
+        wrap_landkode(h[:landkode]),
+        wrap_boolsk("erOmfattetAvFritaksmetoden", h[:er_omfattet_av_fritaksmetoden]),
+        wrap_isin(h[:isinnummer]),
+        wrap_desimaltall("antallAndeler", h[:antall_andeler]),
+        wrap_beloep_heltall("utbytte", h[:utbytte]),
+        wrap_beloep_heltall("renteinntekt", h[:renteinntekt]),
+        wrap_beloep_heltall(
+          "gevinstVedRealisasjonAvAndelIAksjedel",
+          h[:gevinst_ved_realisasjon_av_andel_i_aksjedel]
+        ),
+        wrap_beloep_heltall(
+          "tapVedRealisasjonAvAndelIAksjedel",
+          h[:tap_ved_realisasjon_av_andel_i_aksjedel]
+        ),
+        wrap_beloep_heltall(
+          "gevinstVedRealisasjonAvAndelIRentedel",
+          h[:gevinst_ved_realisasjon_av_andel_i_rentedel]
+        ),
+        wrap_beloep_heltall(
+          "tapVedRealisasjonAvAndelIRentedel",
+          h[:tap_ved_realisasjon_av_andel_i_rentedel]
+        )
+      ]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(&("      " <> &1))
+      |> Enum.join("\n")
+
+    "    <verdipapirfond>\n" <>
+      children <>
+      "\n    </verdipapirfond>"
+  end
+
+  defp forekomst(_, _), do: ""
+
+  defp wrap_navn(_tag, nil), do: ""
+  defp wrap_navn(_tag, ""), do: ""
+
+  defp wrap_navn(tag, value),
+    do: "<#{tag}><organisasjonsnavn>#{escape(value)}</organisasjonsnavn></#{tag}>"
+
+  defp wrap_orgnr(_tag, nil), do: ""
+  defp wrap_orgnr(_tag, ""), do: ""
+
+  defp wrap_orgnr(tag, value),
+    do: "<#{tag}><organisasjonsnummer>#{escape(value)}</organisasjonsnummer></#{tag}>"
+
+  defp wrap_landkode(nil), do: ""
+  defp wrap_landkode(""), do: ""
+
+  defp wrap_landkode(value),
+    do: "<landkode><landkode>#{escape(value)}</landkode></landkode>"
+
+  defp wrap_boolsk(_tag, nil), do: ""
+
+  defp wrap_boolsk(tag, value) when is_boolean(value),
+    do: "<#{tag}><boolsk>#{value}</boolsk></#{tag}>"
+
+  defp wrap_tekst(_tag, nil), do: ""
+  defp wrap_tekst(_tag, ""), do: ""
+
+  defp wrap_tekst(tag, value),
+    do: "<#{tag}><tekst>#{escape(value)}</tekst></#{tag}>"
+
+  defp wrap_isin(nil), do: ""
+  defp wrap_isin(""), do: ""
+
+  defp wrap_isin(value),
+    do: "<isinnummer><isinnummer>#{escape(value)}</isinnummer></isinnummer>"
+
+  defp wrap_antall(_tag, nil), do: ""
+
+  defp wrap_antall(tag, value),
+    do: "<#{tag}><antall>#{value}</antall></#{tag}>"
+
+  defp wrap_desimaltall(_tag, nil), do: ""
+
+  defp wrap_desimaltall(tag, value),
+    do: "<#{tag}><desimaltall>#{value}</desimaltall></#{tag}>"
+
+  defp wrap_aksjeklasse(nil), do: ""
+  defp wrap_aksjeklasse(""), do: ""
+
+  defp wrap_aksjeklasse(value),
+    do: "<aksjeklasse><aksjeklasse>#{escape(value)}</aksjeklasse></aksjeklasse>"
+
+  defp wrap_beloep_heltall(_tag, nil), do: ""
+  defp wrap_beloep_heltall(_tag, 0), do: ""
+
+  defp wrap_beloep_heltall(tag, value),
+    do: "<#{tag}><beloepSomHeltall>#{value}</beloepSomHeltall></#{tag}>"
 
   # ── naeringsspesifikasjon (v6) ──────────────────────────────────────
 

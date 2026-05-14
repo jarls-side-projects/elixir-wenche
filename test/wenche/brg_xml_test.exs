@@ -295,13 +295,13 @@ defmodule Wenche.BrgXmlTest do
     defp assert_xml_valid!(xml, schema_path) do
       unless File.exists?(schema_path), do: flunk("Schema not found: #{schema_path}")
 
-      path = Path.join(System.tmp_dir!(), "brg_xsd_test_#{System.unique_integer([:positive])}.xml")
+      path =
+        Path.join(System.tmp_dir!(), "brg_xsd_test_#{System.unique_integer([:positive])}.xml")
+
       File.write!(path, xml)
 
       {output, status} =
-        System.cmd("xmllint", ["--schema", schema_path, path, "--noout"],
-          stderr_to_stdout: true
-        )
+        System.cmd("xmllint", ["--schema", schema_path, path, "--noout"], stderr_to_stdout: true)
 
       File.rm(path)
 
