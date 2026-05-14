@@ -447,6 +447,71 @@ defmodule Wenche.SkattemeldingXmlTest do
 
       assert xml =~ "<partsreferanse>4711</partsreferanse>"
     end
+
+    test "emits forskjellMellomRegnskapsmessigOgSkattemessigVerdi when :permanent_forskjeller is set" do
+      forskjeller = [
+        %{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 50_429},
+        %{type: :skattepliktigDelAvUtbytterOgUtdelinger, beloep: 1_513},
+        %{type: :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter, beloep: 71}
+      ]
+
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap(),
+          permanent_forskjeller: forskjeller
+        )
+
+      assert xml =~ "<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>"
+
+      assert xml =~
+               "<permanentForskjellstype><permanentForskjellstype>tilbakefoeringAvInntektsfoertUtbytte</permanentForskjellstype></permanentForskjellstype>"
+
+      assert xml =~ "<beloep><beloep><beloep>50429</beloep></beloep></beloep>"
+      assert xml =~ "<beloep><beloep><beloep>1513</beloep></beloep></beloep>"
+      assert xml =~ "<beloep><beloep><beloep>71</beloep></beloep></beloep>"
+      # ids assigned 1..3 in order
+      assert xml =~ "<id>1</id>"
+      assert xml =~ "<id>2</id>"
+      assert xml =~ "<id>3</id>"
+    end
+
+    test "permanent_forskjeller block sits between balanseregnskap and virksomhet" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap(),
+          permanent_forskjeller: [
+            %{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 50_429}
+          ]
+        )
+
+      balanse_idx = :binary.match(xml, "<balanseregnskap>") |> elem(0)
+
+      block_idx =
+        :binary.match(xml, "<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>") |> elem(0)
+
+      virksomhet_idx = :binary.match(xml, "<virksomhet>") |> elem(0)
+
+      assert balanse_idx < block_idx
+      assert block_idx < virksomhet_idx
+    end
+
+    test "drops zero-valued permanent forskjeller" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap(),
+          permanent_forskjeller: [
+            %{type: :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter, beloep: 0},
+            %{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 50_429}
+          ]
+        )
+
+      assert xml =~ "tilbakefoeringAvInntektsfoertUtbytte"
+      refute xml =~ "regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter"
+    end
+
+    test "omits the block entirely when list is empty" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      refute xml =~ "forskjellMellomRegnskapsmessigOgSkattemessigVerdi"
+      refute xml =~ "permanentForskjell"
+    end
   end
 
   describe "generer_request_xml/3" do
@@ -563,8 +628,8 @@ defmodule Wenche.SkattemeldingXmlTest do
     end
   end
 
-  describe "XSD validation (requires xmllint and Skatteetaten XSDs at /tmp/skattemeldingen)" do
-    @xsd_dir "/tmp/skattemeldingen/src/resources/xsd"
+  describe "XSD validation (requires xmllint; XSDs vendored at priv/xsd/skatteetaten)" do
+    @xsd_dir Path.join(:code.priv_dir(:wenche), "xsd/skatteetaten")
 
     @tag :xsd
     test "skattemelding (v5) validates" do
@@ -644,6 +709,22 @@ defmodule Wenche.SkattemeldingXmlTest do
         )
 
       assert_xml_valid!(xml, "#{@xsd_dir}/skattemeldingUpersonlig_v5_ekstern.xsd")
+    end
+
+    @tag :xsd
+    test "naeringsspesifikasjon (v6) with permanent_forskjeller validates" do
+      forskjeller = [
+        %{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 50_429},
+        %{type: :skattepliktigDelAvUtbytterOgUtdelinger, beloep: 1_513},
+        %{type: :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter, beloep: 71}
+      ]
+
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap(),
+          permanent_forskjeller: forskjeller
+        )
+
+      assert_xml_valid!(xml, "#{@xsd_dir}/naeringsspesifikasjon_v6_ekstern.xsd")
     end
 
     defp assert_xml_valid!(xml, schema_path) do

@@ -1,0 +1,17 @@
+XSD files in this directory are vendored from the Skatteetaten/skattemeldingen
+project (https://github.com/Skatteetaten/skattemeldingen), licensed under the
+Apache License 2.0.
+
+Files:
+  - skattemeldingUpersonlig_v5_ekstern.xsd
+  - naeringsspesifikasjon_v6_ekstern.xsd
+  - skattemeldingognaeringsspesifikasjonrequest_v2.xsd
+
+Bundling here lets wenche's tests validate generated XML against the same
+schemas Skatteetaten uses in /valider and /innsendelse without depending on
+an externally-checked-out copy. When SKD publishes updated versions, replace
+the files in-place and run the test suite to surface contract drift.
+
+Copyright Skatteetaten / The Norwegian Tax Administration.
+Licensed under the Apache License, Version 2.0 — see
+https://www.apache.org/licenses/LICENSE-2.0 for the full text.
