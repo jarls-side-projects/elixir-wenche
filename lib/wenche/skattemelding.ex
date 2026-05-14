@@ -759,7 +759,9 @@ defmodule Wenche.Skattemelding do
     org = regnskap.selskap.org_nummer
     aar = regnskap.regnskapsaar
 
-    xml_opts = [partsnummer: ref.partsnummer]
+    xml_opts =
+      [partsnummer: ref.partsnummer]
+      |> maybe_forward_opt(opts, :aksjespesifikasjon)
 
     skattemelding_xml = SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)
     naering_xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap, xml_opts)
@@ -823,7 +825,9 @@ defmodule Wenche.Skattemelding do
 
     case resolve_utkast_referanse(opts, skd_client, aar, org) do
       {:ok, ref} ->
-        xml_opts = [partsnummer: ref.partsnummer]
+        xml_opts =
+          [partsnummer: ref.partsnummer]
+          |> maybe_forward_opt(opts, :aksjespesifikasjon)
 
         skattemelding_xml =
           SkattemeldingXml.generer_skattemelding_xml(regnskap, konfig, xml_opts)
@@ -892,6 +896,14 @@ defmodule Wenche.Skattemelding do
 
   defp maybe_put(kw, _key, nil), do: kw
   defp maybe_put(kw, key, value), do: Keyword.put(kw, key, value)
+
+  defp maybe_forward_opt(target, source_opts, key) do
+    case Keyword.get(source_opts, key) do
+      nil -> target
+      [] -> target
+      value -> Keyword.put(target, key, value)
+    end
+  end
 
   defp append_ref(acc, _type, nil), do: acc
   defp append_ref(acc, _type, ""), do: acc
