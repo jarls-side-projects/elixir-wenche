@@ -199,6 +199,46 @@ defmodule Wenche.SkattemeldingTest do
       assert result.rf_1028.fritaksmetoden.eierandel_over_90 == false
     end
 
+    test "applies holding-driven :permanent_forskjeller and ignores eierandel_datterselskap" do
+      # Mirrors the production Witted scenario:
+      #   revenue 30 000, costs 36 313, andre finans 67, finanskostnad 521,
+      #   utbytte 50 429 (booked in P&L). Holding-driven breakdown reverses
+      #   the full utbytte (50 429), adds 3 % back (1 513), reverses gevinst
+      #   (71). Expected skattepliktig brutto = -5 325.
+      regnskap = %{
+        sample_regnskap()
+        | resultatregnskap: %Resultatregnskap{
+            driftsinntekter: %Driftsinntekter{salgsinntekter: 30_000},
+            driftskostnader: %Driftskostnader{andre_driftskostnader: 36_313},
+            finansposter: %Finansposter{
+              utbytte_fra_datterselskap: 50_429,
+              andre_finansinntekter: 67,
+              rentekostnader: 521
+            }
+          }
+      }
+
+      konfig = %SkattemeldingKonfig{
+        # eierandel = 100 used to silently activate konsernunntak and skip
+        # the 3 % add-back; with :permanent_forskjeller set, it must be ignored.
+        eierandel_datterselskap: 100,
+        permanent_forskjeller: [
+          %{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 50_429},
+          %{type: :skattepliktigDelAvUtbytterOgUtdelinger, beloep: 1_513},
+          %{type: :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter, beloep: 71},
+          %{type: :regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter, beloep: 0}
+        ]
+      }
+
+      result = Skattemelding.beregn(regnskap, konfig)
+
+      # 30 000 - 36 313 + 50 429 + 67 - 521 = 43 662 (regnskapsmessig)
+      # 43 662 - 50 429 + 1 513 - 71 + 0 = -5 325 (skattemessig)
+      assert result.rf_1028.skattepliktig_inntekt_brutto == -5_325
+      assert result.rf_1028.beregnet_skatt == 0
+      assert result.rf_1028.underskudd_til_fremfoering == 5_325
+    end
+
     test "applies loss carryforward deduction" do
       regnskap = %{
         sample_regnskap()
@@ -395,6 +435,66 @@ defmodule Wenche.SkattemeldingTest do
                Skattemelding.valider(sample_regnskap(), %SkattemeldingKonfig{}, skd_client,
                  partsnummer: 7777
                )
+    end
+  end
+
+  describe "parse_etter_beregning/1" do
+    test "extracts SKD-computed numbers from a Witted-shaped validation response" do
+      inner =
+        ~s|<?xml version="1.0" encoding="UTF-8"?>| <>
+          ~s|<skattemelding xmlns="urn:no:skatteetaten:fastsetting:formueinntekt:skattemelding:upersonlig:ekstern:v5">| <>
+          ~s|<partsnummer>3002203783</partsnummer>| <>
+          ~s|<inntektsaar>2025</inntektsaar>| <>
+          ~s|<inntektOgUnderskudd>| <>
+          ~s|<underskuddTilFremfoering>| <>
+          ~s|<fremfoertUnderskuddFraTidligereAar><beloepSomHeltall>18225</beloepSomHeltall></fremfoertUnderskuddFraTidligereAar>| <>
+          ~s|<fremfoerbartUnderskuddIInntekt><beloep><beloepSomHeltall>23550</beloepSomHeltall></beloep></fremfoerbartUnderskuddIInntekt>| <>
+          ~s|</underskuddTilFremfoering>| <>
+          ~s|<inntektFoerFradragForEventueltAvgittKonsernbidrag><beloepSomHeltall>-5325</beloepSomHeltall></inntektFoerFradragForEventueltAvgittKonsernbidrag>| <>
+          ~s|<samletUnderskudd><beloep><beloepSomHeltall>5325</beloepSomHeltall></beloep></samletUnderskudd>| <>
+          ~s|</inntektOgUnderskudd>| <>
+          ~s|</skattemelding>|
+
+      envelope =
+        ~s|<skattemeldingOgNaeringsspesifikasjonResponse xmlns="no:skatteetaten:fastsetting:formueinntekt:skattemeldingognaeringsspesifikasjon:response:v2">| <>
+          ~s|<dokumenter>| <>
+          ~s|<dokument>| <>
+          ~s|<type>skattemeldingUpersonligEtterBeregning</type>| <>
+          ~s|<encoding>utf-8</encoding>| <>
+          ~s|<content>#{Base.encode64(inner)}</content>| <>
+          ~s|</dokument>| <>
+          ~s|</dokumenter>| <>
+          ~s|<resultatAvValidering>validertUtenFeil</resultatAvValidering>| <>
+          ~s|</skattemeldingOgNaeringsspesifikasjonResponse>|
+
+      assert %{
+               partsnummer: 3_002_203_783,
+               inntektsaar: 2025,
+               inntekt_foer_fradrag_for_eventuelt_avgitt_konsernbidrag: -5_325,
+               samlet_underskudd: 5_325,
+               fremfoert_underskudd_fra_tidligere_aar: 18_225,
+               fremfoerbart_underskudd_i_inntekt: 23_550
+             } = Skattemelding.parse_etter_beregning(envelope)
+    end
+
+    test "returns an empty map when no EtterBeregning document is present" do
+      assert Skattemelding.parse_etter_beregning("<other-xml/>") == %{}
+      assert Skattemelding.parse_etter_beregning(nil) == %{}
+    end
+
+    test "returns nil for fields that aren't emitted (loss year has no samletInntekt)" do
+      inner =
+        ~s|<?xml version="1.0"?><skattemelding><partsnummer>123</partsnummer><inntektsaar>2025</inntektsaar></skattemelding>|
+
+      envelope =
+        ~s|<resp><dokument><type>skattemeldingUpersonligEtterBeregning</type><encoding>utf-8</encoding><content>#{Base.encode64(inner)}</content></dokument></resp>|
+
+      result = Skattemelding.parse_etter_beregning(envelope)
+
+      assert result.partsnummer == 123
+      assert result.inntektsaar == 2025
+      assert result.samlet_inntekt == nil
+      assert result.samlet_underskudd == nil
     end
   end
 end

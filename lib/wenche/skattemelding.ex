@@ -112,11 +112,14 @@ defmodule Wenche.Skattemelding do
     andre_finansinntekter = r.finansposter.andre_finansinntekter
     fin_kostnader = Finansposter.sum_kostnader(r.finansposter)
 
-    {skattepliktig_utbytte, fritatt_utbytte} =
-      beregn_fritaksmetoden(konfig, utbytte)
-
-    skattepliktig_inntekt_brutto =
-      driftsresultat + skattepliktig_utbytte + andre_finansinntekter - fin_kostnader
+    {skattepliktig_inntekt_brutto, skattepliktig_utbytte, fritatt_utbytte} =
+      compute_skattepliktig_brutto(
+        driftsresultat,
+        utbytte,
+        andre_finansinntekter,
+        fin_kostnader,
+        konfig
+      )
 
     {fradrag_underskudd, skattepliktig_inntekt_netto, nytt_underskudd, beregnet_skatt} =
       beregn_skattepliktig_inntekt(skattepliktig_inntekt_brutto, konfig)
@@ -136,6 +139,60 @@ defmodule Wenche.Skattemelding do
       beregnet_skatt: beregnet_skatt,
       underskudd_til_fremfoering: if(nytt_underskudd > 0, do: nytt_underskudd, else: 0)
     }
+  end
+
+  # When konfig carries a holding-driven `:permanent_forskjeller` breakdown,
+  # use it as the source of truth: start from the full regnskapsmessig resultat
+  # (which already INCLUDES the utbytte in P&L) and fold in each permanent
+  # forskjell. This is what SKD's /valider does, so the wizard's RF-1028 lines
+  # up with the post-calculation response.
+  #
+  # When `:permanent_forskjeller` is not set we fall back to the legacy global
+  # eierandel_datterselskap heuristic — backwards-compatible for callers that
+  # haven't migrated yet.
+  defp compute_skattepliktig_brutto(
+         driftsresultat,
+         utbytte,
+         andre_finansinntekter,
+         fin_kostnader,
+         %SkattemeldingKonfig{permanent_forskjeller: pf} = _konfig
+       )
+       when is_list(pf) do
+    regnskapsmessig =
+      driftsresultat + utbytte + andre_finansinntekter - fin_kostnader
+
+    brutto = regnskapsmessig + permanent_forskjell_adjustment(pf)
+
+    {brutto, 0, 0}
+  end
+
+  defp compute_skattepliktig_brutto(
+         driftsresultat,
+         utbytte,
+         andre_finansinntekter,
+         fin_kostnader,
+         konfig
+       ) do
+    {skattepliktig_utbytte, fritatt_utbytte} = beregn_fritaksmetoden(konfig, utbytte)
+
+    brutto =
+      driftsresultat + skattepliktig_utbytte + andre_finansinntekter - fin_kostnader
+
+    {brutto, skattepliktig_utbytte, fritatt_utbytte}
+  end
+
+  # Permanent forskjeller adjust regnskapsmessig → skattemessig.
+  # Reversals (utbytte, gevinst) reduce inntekt; add-backs (3 %, tap) raise it.
+  defp permanent_forskjell_adjustment(pf) do
+    Enum.reduce(pf, 0, fn
+      %{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: b}, acc -> acc - b
+      %{type: :skattepliktigDelAvUtbytterOgUtdelinger, beloep: b}, acc -> acc + b
+      %{type: :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter, beloep: b}, acc ->
+        acc - b
+      %{type: :regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter, beloep: b}, acc ->
+        acc + b
+      _, acc -> acc
+    end)
   end
 
   defp beregn_fritaksmetoden(konfig, utbytte)
@@ -334,6 +391,113 @@ defmodule Wenche.Skattemelding do
 
   defp maybe_add_advarsel(list, true, msg), do: list ++ [msg]
   defp maybe_add_advarsel(list, false, _msg), do: list
+
+  @doc """
+  Parses Skatteetaten's `/valider` response and extracts the SKD-computed
+  values from the embedded `skattemeldingUpersonligEtterBeregning` document.
+
+  SKD echoes back the skattemelding with derived (`skatt:erAvledet="true"`)
+  elements populated — those are the numbers callers want to display alongside
+  a successful validation, since they're what Skatteetaten will use for tax
+  assessment.
+
+  Returns a map with the extracted fields. Fields that aren't present in the
+  response (which is normal — many are optional and only emitted when
+  applicable) come back as `nil`.
+
+  ## Extracted fields
+
+    * `:partsnummer` — SKD's resolved partsnummer
+    * `:inntektsaar`
+    * `:inntekt_foer_fradrag_for_eventuelt_avgitt_konsernbidrag` — taxable
+      income before group contribution deduction (negative on a loss year)
+    * `:samlet_inntekt` — total income after deductions (zero on a loss year)
+    * `:samlet_underskudd` — year-loss
+    * `:fremfoert_underskudd_fra_tidligere_aar` — prior-year carryforward used
+    * `:fremfoerbart_underskudd_i_inntekt` — total loss available for future
+      carryforward (prior + this year's added)
+    * `:netto_formue` — net wealth
+    * `:samlet_formuesverdi_etter_verdsettingsrabatt`
+    * `:samlet_gjeld`
+
+  Pass the raw response body from `valider/4`'s `{:ok, body}` tuple.
+  """
+  @spec parse_etter_beregning(binary()) :: map()
+  def parse_etter_beregning(body) when is_binary(body) do
+    case extract_etter_beregning_xml(body) do
+      nil ->
+        %{}
+
+      inner ->
+        %{
+          partsnummer: extract_int(inner, "partsnummer"),
+          inntektsaar: extract_int(inner, "inntektsaar"),
+          inntekt_foer_fradrag_for_eventuelt_avgitt_konsernbidrag:
+            extract_beloep_som_heltall(inner, "inntektFoerFradragForEventueltAvgittKonsernbidrag"),
+          samlet_inntekt: extract_wrapped_beloep(inner, "samletInntekt"),
+          samlet_underskudd: extract_wrapped_beloep(inner, "samletUnderskudd"),
+          fremfoert_underskudd_fra_tidligere_aar:
+            extract_beloep_som_heltall(inner, "fremfoertUnderskuddFraTidligereAar"),
+          fremfoerbart_underskudd_i_inntekt:
+            extract_wrapped_beloep(inner, "fremfoerbartUnderskuddIInntekt"),
+          netto_formue: extract_wrapped_beloep(inner, "nettoformue"),
+          samlet_formuesverdi_etter_verdsettingsrabatt:
+            extract_wrapped_beloep(inner, "samletFormuesverdiEtterVerdsettingsrabatt"),
+          samlet_gjeld: extract_wrapped_beloep(inner, "samletGjeld")
+        }
+    end
+  end
+
+  def parse_etter_beregning(_), do: %{}
+
+  # The response envelope wraps the EtterBeregning XML base64-encoded inside
+  # <dokument><type>skattemeldingUpersonligEtterBeregning</type>...<content>.
+  defp extract_etter_beregning_xml(body) do
+    pattern =
+      ~r{<(?:\w+:)?dokument>\s*<(?:\w+:)?type>\s*skattemeldingUpersonligEtterBeregning\s*</(?:\w+:)?type>\s*<(?:\w+:)?encoding>[^<]*</(?:\w+:)?encoding>\s*<(?:\w+:)?content>\s*([^<]+?)\s*</(?:\w+:)?content>}s
+
+    case Regex.run(pattern, body) do
+      [_, b64] ->
+        case Base.decode64(String.replace(b64, ~r/\s+/, "")) do
+          {:ok, xml} -> xml
+          :error -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  # Plain "<tag>123</tag>" — for partsnummer, inntektsaar, fremfoertUnderskudd...
+  defp extract_int(xml, tag) do
+    case Regex.run(~r{<#{tag}>\s*([-0-9]+)\s*</#{tag}>}, xml) do
+      [_, num] -> String.to_integer(num)
+      _ -> nil
+    end
+  end
+
+  # "<tag><beloepSomHeltall>123</beloepSomHeltall></tag>"
+  defp extract_beloep_som_heltall(xml, tag) do
+    case Regex.run(
+           ~r{<#{tag}>\s*<beloepSomHeltall>\s*([-0-9]+)\s*</beloepSomHeltall>\s*</#{tag}>},
+           xml
+         ) do
+      [_, num] -> String.to_integer(num)
+      _ -> nil
+    end
+  end
+
+  # "<tag><beloep><beloepSomHeltall>123</beloepSomHeltall></beloep></tag>" or
+  # variant with extra <overstyrtBeloep> wrappers — match the innermost number.
+  defp extract_wrapped_beloep(xml, tag) do
+    case Regex.run(
+           ~r{<#{tag}>.*?<beloepSomHeltall>\s*([-0-9]+)\s*</beloepSomHeltall>.*?</#{tag}>}s,
+           xml
+         ) do
+      [_, num] -> String.to_integer(num)
+      _ -> nil
+    end
+  end
 
   @doc """
   Generates a complete pre-filled summary for RF-1167 and RF-1028.

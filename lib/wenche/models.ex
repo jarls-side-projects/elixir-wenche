@@ -369,12 +369,24 @@ defmodule Wenche.Models do
     @moduledoc "Tax return configuration."
     defstruct underskudd_til_fremfoering: 0,
               anvend_fritaksmetoden: true,
-              eierandel_datterselskap: 100
+              eierandel_datterselskap: 100,
+              # When set, beregn/2 uses this list as the authoritative permanent
+              # forskjeller — bypasses the global eierandel_datterselskap heuristic.
+              # Shape: [%{type: atom, beloep: integer}], same as what's emitted
+              # in the naeringsspesifikasjon XML. Supported types:
+              #   :tilbakefoeringAvInntektsfoertUtbytte  (subtract from inntekt)
+              #   :skattepliktigDelAvUtbytterOgUtdelinger (add to inntekt)
+              #   :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter (subtract)
+              #   :regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter (add)
+              permanent_forskjeller: nil
+
+    @type permanent_forskjell :: %{type: atom(), beloep: integer()}
 
     @type t :: %__MODULE__{
             underskudd_til_fremfoering: integer(),
             anvend_fritaksmetoden: boolean(),
-            eierandel_datterselskap: integer()
+            eierandel_datterselskap: integer(),
+            permanent_forskjeller: [permanent_forskjell()] | nil
           }
   end
 end
