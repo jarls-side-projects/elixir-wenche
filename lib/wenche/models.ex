@@ -378,7 +378,14 @@ defmodule Wenche.Models do
               #   :skattepliktigDelAvUtbytterOgUtdelinger (add to inntekt)
               #   :regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter (subtract)
               #   :regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter (add)
-              permanent_forskjeller: nil
+              permanent_forskjeller: nil,
+              # Optional override for the total permanent-forskjell amount used
+              # when computing skattepliktig brutto. When set, beregn/2 uses
+              # this integer instead of summing :permanent_forskjeller items.
+              # Lets callers compute the total from full-precision decimals
+              # and round once (matching Skatteetaten / Fiken), while still
+              # emitting per-line integer breakdowns in the XML.
+              permanent_forskjell_total: nil
 
     @type permanent_forskjell :: %{type: atom(), beloep: integer()}
 
@@ -386,7 +393,8 @@ defmodule Wenche.Models do
             underskudd_til_fremfoering: integer(),
             anvend_fritaksmetoden: boolean(),
             eierandel_datterselskap: integer(),
-            permanent_forskjeller: [permanent_forskjell()] | nil
+            permanent_forskjeller: [permanent_forskjell()] | nil,
+            permanent_forskjell_total: integer() | nil
           }
   end
 end
