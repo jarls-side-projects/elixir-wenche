@@ -155,15 +155,23 @@ defmodule Wenche.Skattemelding do
          utbytte,
          andre_finansinntekter,
          fin_kostnader,
-         %SkattemeldingKonfig{permanent_forskjeller: pf} = _konfig
+         %SkattemeldingKonfig{permanent_forskjeller: pf} = konfig
        )
        when is_list(pf) do
     regnskapsmessig =
       driftsresultat + utbytte + andre_finansinntekter - fin_kostnader
 
-    brutto = regnskapsmessig + permanent_forskjell_adjustment(pf)
+    # Prefer the caller-supplied total when present: the breakdown's integer
+    # components are rounded per-line for XML reporting, so summing them
+    # drops the cumulative fractional cents. A caller that holds the raw
+    # decimals can round once and pass the corrected total here.
+    adjustment =
+      case konfig.permanent_forskjell_total do
+        nil -> permanent_forskjell_adjustment(pf)
+        total when is_integer(total) -> total
+      end
 
-    {brutto, 0, 0}
+    {regnskapsmessig + adjustment, 0, 0}
   end
 
   defp compute_skattepliktig_brutto(
