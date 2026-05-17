@@ -871,7 +871,9 @@ defmodule Wenche.Skattemelding do
     "#{nok(aarets)}   #{nok(fjoraarets)}"
   end
 
-  defp ekk(v) do
+  # Format one column of the egenkapital reconciliation table:
+  # integer NOK with thousand separators, right-padded to 12 chars.
+  defp ek_col(v) do
     String.pad_leading(Integer.to_string(v) |> add_thousand_sep(), 12)
   end
 
@@ -886,7 +888,7 @@ defmodule Wenche.Skattemelding do
 
   defp ek_rad(label, ak, ok, aek) do
     s = ak + ok + aek
-    "  #{pad_left(label, 20)}#{ekk(ak)}#{ekk(ok)}#{ekk(aek)}#{ekk(s)}"
+    "  #{pad_left(label, 20)}#{ek_col(ak)}#{ek_col(ok)}#{ek_col(aek)}#{ek_col(s)}"
   end
 
   defp pad_left(str, width), do: String.pad_leading(to_string(str), width)

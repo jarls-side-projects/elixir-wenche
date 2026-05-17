@@ -18,9 +18,15 @@ Ported from the Python CLI tool [Wenche](https://github.com/olefredrik/Wenche).
 | `Wenche.Aarsregnskap` | Annual accounts submission flow (config, validation, submission) | `wenche/aarsregnskap.py` |
 | `Wenche.BrgXml` | BRG annual statement XML (hovedskjema/underskjema) | `wenche/brg_xml.py` |
 | `Wenche.Ixbrl` | Inline XBRL (iXBRL) HTML document generation | `wenche/xbrl.py` |
-| `Wenche.Skattemelding` | Tax calculation with fritaksmetoden (RF-1028/RF-1167). **Note:** systemic submission is experimental — see module docs. | `wenche/skattemelding.py` |
+| `Wenche.Noter` | Notes (noter) for small enterprises — structured XML + iXBRL text | `wenche/noter.py` |
+| `Wenche.Skattemelding` | Tax calculation, structured `beregn/2`, and Altinn 3 submission orchestration for skattemelding (RF-1028/RF-1167) | `wenche/skattemelding.py` |
+| `Wenche.SkattemeldingXml` | Skattemelding XML (`skattemeldingUpersonlig` v5, `naeringsspesifikasjon` v6, request envelope v2) against Skatteetaten XSDs | — |
+| `Wenche.SkdSkattemeldingClient` | Skatteetaten REST API client for skattemelding (pre-filled draft, valider) | — |
+| `Wenche.MvaMelding` | VAT return (MVA-melding) submission via Altinn 3. **Experimental.** | — |
+| `Wenche.MvaMeldingXml` | MVA-melding XML generation (`mvaMeldingInnsending` + `mvaMeldingDto`) | — |
 | `Wenche.Aksjonaerregister` | RF-1086 shareholder register XML generation | `wenche/aksjonaerregister.py` |
-| `Wenche.Models` | Data structures (Selskap, Aarsregnskap, Resultatregnskap, Balanse, etc.) | `wenche/models.py` |
+| `Wenche.SkdClient` | Skatteetaten REST API client for RF-1086 (1086H / 1086U / bekreft) | — |
+| `Wenche.Models` | Data structures (Selskap, Aarsregnskap, Resultatregnskap, Balanse, SkattemeldingKonfig, etc.) | `wenche/models.py` |
 
 ## Installation
 
@@ -29,7 +35,7 @@ Add `wenche` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:wenche, "~> 0.1.1"}
+    {:wenche, "~> 0.2.0"}
   ]
 end
 ```
