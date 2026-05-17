@@ -9,10 +9,10 @@ defmodule Wenche.MvaMeldingTest do
       termin: 1,
       year: 2025,
       system_name: "TestSystem",
-      fastsatt_merverdiavgift: 1500,
+      fastsatt_merverdiavgift: 1_500,
       linjer: [
-        %{mva_kode: 3, grunnlag: 10000, sats: 25, merverdiavgift: 2500},
-        %{mva_kode: 1, grunnlag: 4000, sats: 25, merverdiavgift: 1000}
+        %{mva_kode: 3, grunnlag: 10_000, sats: 25, merverdiavgift: 2_500},
+        %{mva_kode: 1, grunnlag: 4_000, sats: 25, merverdiavgift: 1_000}
       ]
     }
   end
@@ -46,5 +46,4 @@ defmodule Wenche.MvaMeldingTest do
                )
     end
   end
-
 end

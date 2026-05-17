@@ -208,8 +208,7 @@ defmodule Wenche.SkattemeldingXml do
         wrap_beloep_heltall("tapVedRealisasjonAvAksje", h[:tap_ved_realisasjon_av_aksje])
       ]
       |> Enum.reject(&(&1 == ""))
-      |> Enum.map(&("      " <> &1))
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", &("      " <> &1))
 
     "    <aksjeIAksjonaerregisteret>\n" <>
       children <>
@@ -237,8 +236,7 @@ defmodule Wenche.SkattemeldingXml do
         wrap_beloep_heltall("tapVedRealisasjonAvAksje", h[:tap_ved_realisasjon_av_aksje])
       ]
       |> Enum.reject(&(&1 == ""))
-      |> Enum.map(&("      " <> &1))
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", &("      " <> &1))
 
     "    <aksjeIkkeIAksjonaerregisteret>\n" <>
       children <>
@@ -275,8 +273,7 @@ defmodule Wenche.SkattemeldingXml do
         )
       ]
       |> Enum.reject(&(&1 == ""))
-      |> Enum.map(&("      " <> &1))
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", &("      " <> &1))
 
     "    <verdipapirfond>\n" <>
       children <>
@@ -440,8 +437,7 @@ defmodule Wenche.SkattemeldingXml do
       |> Enum.map(&normalize_permanent_forskjell/1)
       |> Enum.filter(&(&1.beloep > 0))
       |> Enum.with_index(1)
-      |> Enum.map(fn {entry, idx} -> permanent_forskjell(entry, idx) end)
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", fn {entry, idx} -> permanent_forskjell(entry, idx) end)
 
     if forekomster == "" do
       ""
