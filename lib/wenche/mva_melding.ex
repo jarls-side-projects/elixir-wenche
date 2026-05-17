@@ -82,9 +82,8 @@ defmodule Wenche.MvaMelding do
              melding_xml,
              "application/xml"
            ),
-         {:ok, _} <- AltinnClient.fullfoor_instans(client, "mva_melding", instans),
-         {:ok, inbox_url} <- AltinnClient.fullfoor_instans(client, "mva_melding", instans) do
-      {:ok, inbox_url}
+         {:ok, _} <- AltinnClient.fullfoor_instans(client, "mva_melding", instans) do
+      AltinnClient.fullfoor_instans(client, "mva_melding", instans)
     end
   end
 

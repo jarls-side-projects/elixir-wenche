@@ -94,8 +94,7 @@ defmodule Wenche.MvaMeldingXml do
 
     linjer_xml =
       linjer
-      |> Enum.map(&spesifikasjonslinje_xml/1)
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", &spesifikasjonslinje_xml/1)
 
     """
     <?xml version="1.0" encoding="UTF-8"?>

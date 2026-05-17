@@ -633,7 +633,8 @@ defmodule Wenche.SkattemeldingXmlTest do
           ]
         )
 
-      assert xml =~ ~r{regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter.*?<beloep>101</beloep>}s
+      assert xml =~
+               ~r{regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter.*?<beloep>101</beloep>}s
     end
   end
 
