@@ -422,8 +422,11 @@ defmodule Wenche.SkattemeldingXml do
         (0633, tillegg).
     * `:beloep` — `Decimal.t` or integer NOK (always positive; the
       kodeliste's `kategori` determines whether SKD treats it as
-      tillegg or fradrag). Decimal beloep is rounded per line with
-      `:half_up` for emission as an integer.
+      tillegg or fradrag). Decimal beloep is rounded per line for
+      emission as an integer. Rounding mode is `:half_up` for most
+      types; the 3 % addback (`:skattepliktigDelAvUtbytterOgUtdelinger`)
+      floors instead, per skatteloven § 2-38 (6) and the SKD
+      veiledning convention.
     * `:beskrivelse` — optional free text.
 
   Entries with `:beloep <= 0` (after rounding) are dropped — SKD
