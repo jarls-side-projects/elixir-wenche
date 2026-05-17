@@ -98,9 +98,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `generer_underskjema/1`, `Wenche.SkattemeldingXml.generer_skattemelding_xml/3`
   + `generer_naeringsspesifikasjon_xml/2` + `generer_request_xml/3`, or
   `Wenche.MvaMeldingXml.generer_konvolutt_xml/1` + `generer_melding_xml/1`.
-- The short-lived `:permanent_forskjell_total` override on `SkattemeldingKonfig`
-  (introduced and removed within this release cycle; superseded by accepting
-  `Decimal` `:beloep` in the per-line breakdown).
 
 ## [0.1.1] - 2026-03-19
 
