@@ -7,6 +7,8 @@
     elixir
     hex
     mix2nix
+    # xmllint, used by XSD validation tests in test/wenche/*_test.exs
+    libxml2
   ];
 
   inputs = with pkgs;
