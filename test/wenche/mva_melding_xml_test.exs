@@ -58,7 +58,9 @@ defmodule Wenche.MvaMeldingXmlTest do
     test "produces valid XML with correct root element" do
       xml = MvaMeldingXml.generer_konvolutt_xml(sample_mva_data())
 
-      assert xml =~ "<mvaMeldingInnsending xmlns=\"no:skatteetaten:fastsetting:avgift:mva:mvameldinginnsending:v1.0\">"
+      assert xml =~
+               "<mvaMeldingInnsending xmlns=\"no:skatteetaten:fastsetting:avgift:mva:mvameldinginnsending:v1.0\">"
+
       assert xml =~ "</mvaMeldingInnsending>"
     end
 
@@ -256,7 +258,10 @@ defmodule Wenche.MvaMeldingXmlTest do
       unless File.exists?(schema_path), do: flunk("Schema not found: #{schema_path}")
 
       path =
-        Path.join(System.tmp_dir!(), "wenche_mva_xsd_test_#{System.unique_integer([:positive])}.xml")
+        Path.join(
+          System.tmp_dir!(),
+          "wenche_mva_xsd_test_#{System.unique_integer([:positive])}.xml"
+        )
 
       File.write!(path, xml)
 
