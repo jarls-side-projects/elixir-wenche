@@ -17,22 +17,60 @@ defmodule Wenche.MvaMeldingTest do
     }
   end
 
+  defp ok_xml do
+    """
+    <?xml version='1.0' encoding='UTF-8'?>
+    <valideringsresultat xmlns="no:skatteetaten:fastsetting:avgift:mva:valideringsresultat:v1">
+      <avvikVedMeldingslevering>ok</avvikVedMeldingslevering>
+    </valideringsresultat>
+    """
+  end
+
+  defp ugyldig_xml do
+    """
+    <?xml version='1.0' encoding='UTF-8'?>
+    <valideringsresultat xmlns="no:skatteetaten:fastsetting:avgift:mva:valideringsresultat:v1">
+      <avvikVedMeldingslevering>ugyldig skattemelding</avvikVedMeldingslevering>
+      <avvik>
+        <stiTilAvvik>//meldingskategori</stiTilAvvik>
+        <mvaKode>null</mvaKode>
+        <avviksinformasjon>
+          <begrunnelse>Virksomheten er ikke registrert i Merverdiavgiftsregisteret med plikt til å levere mva-melding for alminnelig næring.</begrunnelse>
+          <avvikstype>ugyldig skattemelding</avvikstype>
+          <avvikKode>MVA_PLIKT_OPPGITT_MELDINGSKATEGORI_ALMINNELIG_NÆRING_FINNES_IKKE</avvikKode>
+          <regelDefinisjon>R047</regelDefinisjon>
+        </avviksinformasjon>
+      </avvik>
+    </valideringsresultat>
+    """
+  end
+
+  defp send_xml(conn, status, body) do
+    conn
+    |> Plug.Conn.put_resp_content_type("application/xml")
+    |> Plug.Conn.send_resp(status, body)
+  end
+
   describe "valider/2" do
-    test "returns ok with validation result on success" do
+    test "returns parsed validation result on success" do
       Req.Test.stub(Wenche.MvaMelding, fn conn ->
         assert conn.method == "POST"
         assert conn.host == "idporten-api-test.sits.no"
         assert conn.request_path == "/api/mva/grensesnittstoette/mva-melding/valider"
         assert {"authorization", "Bearer test-token"} in conn.req_headers
-        Req.Test.json(conn, %{"status" => "ok", "errors" => []})
+        send_xml(conn, 200, ok_xml())
       end)
 
-      assert {:ok, %{"status" => "ok"}} =
+      assert {:ok, result} =
                MvaMelding.valider(sample_mva_data(),
                  token: "test-token",
                  env: "test",
                  req_options: [plug: {Req.Test, Wenche.MvaMelding}]
                )
+
+      assert result.avvik_ved_meldingslevering == "ok"
+      assert result.avvik == []
+      assert is_binary(result.raw_xml)
     end
 
     test "uses the documented production validation endpoint" do
@@ -40,10 +78,10 @@ defmodule Wenche.MvaMeldingTest do
         assert conn.method == "POST"
         assert conn.host == "idporten.api.skatteetaten.no"
         assert conn.request_path == "/api/mva/grensesnittstoette/mva-melding/valider"
-        Req.Test.json(conn, %{"status" => "ok", "errors" => []})
+        send_xml(conn, 200, ok_xml())
       end)
 
-      assert {:ok, %{"status" => "ok"}} =
+      assert {:ok, %{avvik_ved_meldingslevering: "ok"}} =
                MvaMelding.valider(sample_mva_data(),
                  token: "test-token",
                  env: "prod",
@@ -51,9 +89,34 @@ defmodule Wenche.MvaMeldingTest do
                )
     end
 
+    test "parses avvik entries from an invalid validation result" do
+      Req.Test.stub(Wenche.MvaMelding, fn conn ->
+        send_xml(conn, 200, ugyldig_xml())
+      end)
+
+      assert {:ok, result} =
+               MvaMelding.valider(sample_mva_data(),
+                 token: "test-token",
+                 env: "test",
+                 req_options: [plug: {Req.Test, Wenche.MvaMelding}]
+               )
+
+      assert result.avvik_ved_meldingslevering == "ugyldig skattemelding"
+      assert [avvik] = result.avvik
+      assert avvik.sti_til_avvik == "//meldingskategori"
+      assert avvik.mva_kode == "null"
+      assert avvik.avvikstype == "ugyldig skattemelding"
+
+      assert avvik.avvik_kode ==
+               "MVA_PLIKT_OPPGITT_MELDINGSKATEGORI_ALMINNELIG_NÆRING_FINNES_IKKE"
+
+      assert avvik.begrunnelse =~ "ikke registrert"
+      assert avvik.regel_definisjon == "R047"
+    end
+
     test "returns error on validation failure" do
       Req.Test.stub(Wenche.MvaMelding, fn conn ->
-        Plug.Conn.send_resp(conn, 400, Jason.encode!(%{"errors" => ["invalid period"]}))
+        send_xml(conn, 400, "<error>bad request</error>")
       end)
 
       assert {:error, {:valider_failed, 400, _}} =

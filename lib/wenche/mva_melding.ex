@@ -97,6 +97,26 @@ defmodule Wenche.MvaMelding do
   - `:token` — Altinn/Maskinporten token for authentication
   - `:req_options` — additional options merged into `Req` calls (e.g. for test stubs)
 
+  Skatteetaten's validation endpoint always responds with an XML
+  `<valideringsresultat>` document — even when the melding is invalid the
+  HTTP status is 200 and the payload describes the rule violations. This
+  function parses that document into:
+
+      %{
+        avvik_ved_meldingslevering: "ok" | "ugyldig skattemelding" | "advarsel" | nil,
+        avvik: [
+          %{
+            sti_til_avvik: String.t() | nil,
+            mva_kode: String.t() | nil,
+            begrunnelse: String.t() | nil,
+            avvikstype: String.t() | nil,
+            avvik_kode: String.t() | nil,
+            regel_definisjon: String.t() | nil
+          }
+        ],
+        raw_xml: String.t()
+      }
+
   Returns `{:ok, validation_result}` or `{:error, reason}`.
   """
   def valider(mva_data, opts \\ []) do
@@ -113,18 +133,23 @@ defmodule Wenche.MvaMelding do
     headers = [
       {"content-type", "application/xml"},
       {"authorization", "Bearer #{token}"},
-      {"accept", "application/json"}
+      {"accept", "application/xml"}
     ]
 
     case Req.post(
            base_url,
            Keyword.merge(
-             [body: melding_xml, headers: headers, receive_timeout: 30_000],
+             [
+               body: melding_xml,
+               headers: headers,
+               decode_body: false,
+               receive_timeout: 30_000
+             ],
              req_options
            )
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
-        {:ok, body}
+        {:ok, parse_valideringsresultat(to_string(body))}
 
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:valider_failed, status, body}}
@@ -132,5 +157,63 @@ defmodule Wenche.MvaMelding do
       {:error, reason} ->
         {:error, {:request_failed, reason}}
     end
+  end
+
+  # ── Validation response parsing ────────────────────────────────────
+  #
+  # The endpoint returns documents shaped like:
+  #
+  #     <valideringsresultat xmlns="...">
+  #       <avvikVedMeldingslevering>ugyldig skattemelding</avvikVedMeldingslevering>
+  #       <avvik>
+  #         <stiTilAvvik>//meldingskategori</stiTilAvvik>
+  #         <mvaKode>null</mvaKode>
+  #         <avviksinformasjon>
+  #           <begrunnelse>…</begrunnelse>
+  #           <avvikstype>…</avvikstype>
+  #           <avvikKode>…</avvikKode>
+  #           <regelDefinisjon>…</regelDefinisjon>
+  #         </avviksinformasjon>
+  #       </avvik>
+  #     </valideringsresultat>
+  #
+  # On a clean validation `<avvik>` blocks are absent.
+  defp parse_valideringsresultat(xml) when is_binary(xml) do
+    %{
+      avvik_ved_meldingslevering: extract_text(xml, "avvikVedMeldingslevering"),
+      avvik: extract_avvik(xml),
+      raw_xml: xml
+    }
+  end
+
+  defp extract_avvik(xml) do
+    ~r{<(?:\w+:)?avvik>(.*?)</(?:\w+:)?avvik>}s
+    |> Regex.scan(xml, capture: :all_but_first)
+    |> Enum.map(fn [inner] ->
+      %{
+        sti_til_avvik: extract_text(inner, "stiTilAvvik"),
+        mva_kode: extract_text(inner, "mvaKode"),
+        begrunnelse: extract_text(inner, "begrunnelse"),
+        avvikstype: extract_text(inner, "avvikstype"),
+        avvik_kode: extract_text(inner, "avvikKode"),
+        regel_definisjon: extract_text(inner, "regelDefinisjon")
+      }
+    end)
+  end
+
+  defp extract_text(xml, tag) do
+    case Regex.run(~r{<(?:\w+:)?#{tag}>(.*?)</(?:\w+:)?#{tag}>}s, xml) do
+      [_, value] -> value |> String.trim() |> unescape_entities()
+      _ -> nil
+    end
+  end
+
+  defp unescape_entities(s) do
+    s
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&apos;", "'")
+    |> String.replace("&amp;", "&")
   end
 end
