@@ -42,6 +42,11 @@ defmodule Wenche.Maskinporten do
   # Scope for aksjonærregisteroppgave submission directly to SKD's API
   @skd_aksjonaer_scope "skatteetaten:innrapporteringaksjonaerregisteroppgave"
 
+  # Scope for MVA-melding validation against Skatteetaten's standalone API.
+  # Submission uses `@scopes` (Altinn instance scopes). Both flows require an
+  # ID-porten end-user token; Maskinporten/system-user is not supported.
+  @mva_melding_validation_scope "skatteetaten:mvameldingvalidering"
+
   # Scopes for skattemeldingen (tax return): direct SKD API + Altinn 3 instances.
   # Both Altinn scopes are required so Skatteetaten can resolve the systemuser →
   # executor trace via Altinn ("spor til utførende"); without them SKD rejects
@@ -253,4 +258,10 @@ defmodule Wenche.Maskinporten do
   Returns the skattemeldingen scope.
   """
   def skattemelding_scope, do: @skattemelding_scope
+
+  @doc """
+  Returns the MVA-melding validation scope used against Skatteetaten's
+  standalone validation API (ID-porten end-user flow).
+  """
+  def mva_melding_validation_scope, do: @mva_melding_validation_scope
 end
