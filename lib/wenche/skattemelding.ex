@@ -483,71 +483,22 @@ defmodule Wenche.Skattemelding do
   When the regnskap has no fjoraar data, IB is `0` and årsresultat is
   treated as the entire build-up of EK.
   """
+  @spec beregn_egenkapitalavstemming(Aarsregnskap.t()) :: %{
+          inngaaende_ek: integer(),
+          utgaaende_ek: integer(),
+          endringer: [map()],
+          sum_tillegg: integer(),
+          sum_fradrag: integer()
+        }
   def beregn_egenkapitalavstemming(%Aarsregnskap{} = regnskap) do
     ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
     utgaaende_ek = ek_ub.aksjekapital + ek_ub.overkursfond + ek_ub.annen_egenkapital
 
-    har_fjoraar =
-      regnskap.foregaaende_aar_resultat != %Resultatregnskap{} or
-        regnskap.foregaaende_aar_balanse != %Balanse{}
+    {inngaaende_ek, kapital_delta, aarsresultat} =
+      compute_avstemming_deltas(regnskap, ek_ub)
 
-    {inngaaende_ek, kapital_delta, aarsresultat, annen_residual} =
-      if har_fjoraar do
-        ek_ib = regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital
-        ib = ek_ib.aksjekapital + ek_ib.overkursfond + ek_ib.annen_egenkapital
-
-        kap_delta =
-          ek_ub.aksjekapital - ek_ib.aksjekapital +
-            (ek_ub.overkursfond - ek_ib.overkursfond)
-
-        aarsresultat =
-          ek_ub.annen_egenkapital - ek_ib.annen_egenkapital + regnskap.utbytte_utbetalt
-
-        {ib, kap_delta, aarsresultat, 0}
-      else
-        kap_delta = ek_ub.aksjekapital + ek_ub.overkursfond
-        aarsresultat = ek_ub.annen_egenkapital + regnskap.utbytte_utbetalt
-
-        {0, kap_delta, aarsresultat, 0}
-      end
-
-    endringer =
-      []
-      |> maybe_add_endring(aarsresultat > 0, "aaretsOverskudd", :tillegg, aarsresultat)
-      |> maybe_add_endring(aarsresultat < 0, "aaretsUnderskudd", :fradrag, -aarsresultat)
-      |> maybe_add_endring(
-        regnskap.utbytte_utbetalt > 0,
-        "avsattEllerForventetUtbytte",
-        :fradrag,
-        regnskap.utbytte_utbetalt
-      )
-      |> maybe_add_endring(kapital_delta > 0, "kontantinnskudd", :tillegg, kapital_delta)
-      |> maybe_add_endring(
-        kapital_delta < 0,
-        "nedsettelseAvAksjekapitalOgUtdelingAvOverkursKontanter",
-        :fradrag,
-        -kapital_delta
-      )
-      |> maybe_add_endring(
-        annen_residual > 0,
-        "annenPositivEndringIEgenkapital",
-        :tillegg,
-        annen_residual
-      )
-      |> maybe_add_endring(
-        annen_residual < 0,
-        "annenNegativEndringIEgenkapital",
-        :fradrag,
-        -annen_residual
-      )
-      |> Enum.with_index(1)
-      |> Enum.map(fn {row, i} -> Map.put(row, :id, Integer.to_string(i)) end)
-
-    sum_tillegg =
-      endringer |> Enum.filter(&(&1.kategori == :tillegg)) |> Enum.map(& &1.beloep) |> Enum.sum()
-
-    sum_fradrag =
-      endringer |> Enum.filter(&(&1.kategori == :fradrag)) |> Enum.map(& &1.beloep) |> Enum.sum()
+    endringer = build_endringer(aarsresultat, kapital_delta, regnskap.utbytte_utbetalt)
+    {sum_tillegg, sum_fradrag} = sum_endringer(endringer)
 
     %{
       inngaaende_ek: inngaaende_ek,
@@ -558,6 +509,73 @@ defmodule Wenche.Skattemelding do
     }
   end
 
+  @spec build_endringer(integer(), integer(), integer()) :: [map()]
+  defp build_endringer(aarsresultat, kapital_delta, utbytte) do
+    []
+    |> maybe_add_endring(aarsresultat > 0, "aaretsOverskudd", :tillegg, aarsresultat)
+    |> maybe_add_endring(aarsresultat < 0, "aaretsUnderskudd", :fradrag, -aarsresultat)
+    |> maybe_add_endring(utbytte > 0, "avsattEllerForventetUtbytte", :fradrag, utbytte)
+    |> maybe_add_endring(kapital_delta > 0, "kontantinnskudd", :tillegg, kapital_delta)
+    |> maybe_add_endring(
+      kapital_delta < 0,
+      "nedsettelseAvAksjekapitalOgUtdelingAvOverkursKontanter",
+      :fradrag,
+      -kapital_delta
+    )
+    |> add_ids()
+  end
+
+  @spec add_ids([map()]) :: [map()]
+  defp add_ids(rows) do
+    rows
+    |> Enum.with_index(1)
+    |> Enum.map(fn {row, i} -> Map.put(row, :id, Integer.to_string(i)) end)
+  end
+
+  @spec sum_endringer([map()]) :: {integer(), integer()}
+  defp sum_endringer(endringer) do
+    Enum.reduce(endringer, {0, 0}, fn row, {t, f} ->
+      case row.kategori do
+        :tillegg -> {t + row.beloep, f}
+        :fradrag -> {t, f + row.beloep}
+      end
+    end)
+  end
+
+  @spec compute_avstemming_deltas(Aarsregnskap.t(), Wenche.Models.Egenkapital.t()) ::
+          {integer(), integer(), integer()}
+  defp compute_avstemming_deltas(regnskap, ek_ub) do
+    har_fjoraar =
+      regnskap.foregaaende_aar_resultat != %Resultatregnskap{} or
+        regnskap.foregaaende_aar_balanse != %Balanse{}
+
+    if har_fjoraar do
+      ek_ib = regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital
+      ib = ek_ib.aksjekapital + ek_ib.overkursfond + ek_ib.annen_egenkapital
+
+      kap_delta =
+        ek_ub.aksjekapital - ek_ib.aksjekapital +
+          (ek_ub.overkursfond - ek_ib.overkursfond)
+
+      aarsresultat =
+        ek_ub.annen_egenkapital - ek_ib.annen_egenkapital + regnskap.utbytte_utbetalt
+
+      {ib, kap_delta, aarsresultat}
+    else
+      kap_delta = ek_ub.aksjekapital + ek_ub.overkursfond
+      aarsresultat = ek_ub.annen_egenkapital + regnskap.utbytte_utbetalt
+
+      {0, kap_delta, aarsresultat}
+    end
+  end
+
+  @spec maybe_add_endring(
+          [map()],
+          boolean(),
+          String.t(),
+          :tillegg | :fradrag,
+          integer()
+        ) :: [map()]
   defp maybe_add_endring(list, false, _type, _kategori, _beloep), do: list
 
   defp maybe_add_endring(list, true, type, kategori, beloep),

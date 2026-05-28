@@ -14,7 +14,10 @@ defmodule Wenche.MixProject do
       description: description(),
       package: package(),
       source_url: @source_url,
-      docs: docs()
+      docs: docs(),
+      dialyzer: [
+        plt_add_apps: [:mix, :ex_unit]
+      ]
     ]
   end
 
@@ -35,7 +38,8 @@ defmodule Wenche.MixProject do
       {:yaml_elixir, "~> 2.11"},
       {:plug, "~> 1.0", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
     ]
   end
 

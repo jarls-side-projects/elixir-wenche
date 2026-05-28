@@ -223,12 +223,12 @@ defmodule Wenche.SkattemeldingXml do
     end
   end
 
+  @spec egenkapitalavstemming_block(map()) :: String.t()
   defp egenkapitalavstemming_block(%{utgaaende_ek: 0, inngaaende_ek: 0, endringer: []}), do: ""
 
   defp egenkapitalavstemming_block(%{} = avstemming) do
     endringer =
-      avstemming.endringer
-      |> Enum.map(fn e ->
+      Enum.map_join(avstemming.endringer, "\n", fn e ->
         """
             <egenkapitalendring>
               <id>#{e.id}</id>
@@ -240,19 +240,28 @@ defmodule Wenche.SkattemeldingXml do
         """
         |> String.trim_trailing()
       end)
-      |> Enum.join("\n")
+
+    # `sumTilleggIEgenkapital` / `sumFradragIEgenkapital` are emitted only
+    # when non-zero. SKD flags a `mottattVerdi 0.00` informational avvik
+    # when we send the element with no real movement.
+    sum_tillegg_xml = optional_beloep("sumTilleggIEgenkapital", avstemming.sum_tillegg)
+    sum_fradrag_xml = optional_beloep("sumFradragIEgenkapital", avstemming.sum_fradrag)
 
     """
       <egenkapitalavstemming>
         #{beloep_med_skattemessige("inngaaendeEgenkapital", avstemming.inngaaende_ek)}
-        #{beloep_med_skattemessige("sumTilleggIEgenkapital", avstemming.sum_tillegg)}
-        #{beloep_med_skattemessige("sumFradragIEgenkapital", avstemming.sum_fradrag)}
+    #{sum_tillegg_xml}
+    #{sum_fradrag_xml}
     #{endringer}
         #{beloep_med_skattemessige("utgaaendeEgenkapital", avstemming.utgaaende_ek)}
       </egenkapitalavstemming>
     """
     |> String.trim_trailing()
+    |> remove_blank_lines()
   end
+
+  defp optional_beloep(_tag, 0), do: ""
+  defp optional_beloep(tag, value), do: "    " <> beloep_med_skattemessige(tag, value)
 
   # Emits a `BeloepMedSkattemessigeEgenskaper` element — three nested
   # `<beloep>` levels where the innermost is the decimal value
@@ -371,15 +380,15 @@ defmodule Wenche.SkattemeldingXml do
     end
   end
 
+  # No `<erOverstyrt>` wrapper — we compute these values from regnskap data,
+  # we never override them, so signalling "the taxpayer manually overrode
+  # this" is incorrect (and noisy for SKD's audit trail).
   defp overstyrt_heltall(tag, value) do
     """
     <#{tag}>
       <beloep>
         <beloepSomHeltall>#{value}</beloepSomHeltall>
       </beloep>
-      <erOverstyrt>
-        <boolsk>true</boolsk>
-      </erOverstyrt>
     </#{tag}>
     """
     |> String.trim()
@@ -626,6 +635,7 @@ defmodule Wenche.SkattemeldingXml do
     `innkommendeForespoerselManglerSporTilUtfoerende` in the
     tilbakemelding after a successful Altinn signing.
   """
+  @spec generer_naeringsspesifikasjon_xml(Aarsregnskap.t(), keyword()) :: String.t()
   def generer_naeringsspesifikasjon_xml(%Aarsregnskap{} = regnskap, opts \\ []) do
     partsnummer = Keyword.get(opts, :partsnummer, regnskap.selskap.org_nummer)
     aar = regnskap.regnskapsaar
@@ -691,21 +701,29 @@ defmodule Wenche.SkattemeldingXml do
   Entries with `:beloep <= 0` (after rounding) are dropped — SKD
   rejects zero-valued permanent forskjeller as invalid.
   """
+  @spec generer_permanent_forskjell_block([map()]) :: String.t()
   def generer_permanent_forskjell_block([]), do: ""
 
   def generer_permanent_forskjell_block(entries) when is_list(entries) do
-    forekomster =
+    normalized =
       entries
       |> Enum.map(&normalize_permanent_forskjell/1)
       |> Enum.filter(&(&1.beloep > 0))
+
+    forekomster =
+      normalized
       |> Enum.with_index(1)
       |> Enum.map_join("\n", fn {entry, idx} -> permanent_forskjell(entry, idx) end)
 
     if forekomster == "" do
       ""
     else
-      {sum_tillegg, sum_fradrag} =
-        Wenche.Skattemelding.permanent_forskjeller_tillegg_fradrag(entries)
+      # Sum the per-line rounded ints (not the decimal sum, round-once).
+      # SKD cross-validates `sumTilleggINaeringsinntekt` /
+      # `sumFradragINaeringsinntekt` by adding up the integers we declared
+      # on each permanentForskjell; round-once drift produces a 1 kr avvik
+      # on both these sums and (transitively) on `skattemessigResultat`.
+      {sum_tillegg, sum_fradrag} = pf_sums_from_normalized(normalized)
 
       sums =
         "\n    " <>
@@ -725,6 +743,7 @@ defmodule Wenche.SkattemeldingXml do
   # missing from the submission. We always emit it once we have a regnskap
   # — fordeltSkattemessigResultat at id="1" carries the full year for an
   # ordinary AS (single virksomhet).
+  @spec beregnet_naeringsinntekt_block(integer()) :: String.t()
   defp beregnet_naeringsinntekt_block(skattepliktig_brutto) do
     """
       <beregnetNaeringsinntekt>
@@ -742,6 +761,32 @@ defmodule Wenche.SkattemeldingXml do
   defp normalize_permanent_forskjell(%{type: type, beloep: b} = entry) do
     %{entry | beloep: beloep_to_int(b, rounding_mode(type))}
   end
+
+  # Sums the rounded-int entries by tillegg/fradrag category. Mirrors the
+  # classification in `Wenche.Skattemelding.permanent_forskjeller_tillegg_fradrag/1`
+  # but operates on already-rounded values so the result is the same integer
+  # SKD gets when it adds up the per-line `<beloep>` ints in our XML.
+  defp pf_sums_from_normalized(entries) do
+    Enum.reduce(entries, {0, 0}, fn %{type: type, beloep: b}, {t, f} ->
+      case pf_kategori(type) do
+        :tillegg -> {t + b, f}
+        :fradrag -> {t, f + b}
+        :ignore -> {t, f}
+      end
+    end)
+  end
+
+  defp pf_kategori(type) when is_atom(type), do: pf_kategori(to_string(type))
+  defp pf_kategori("tilbakefoeringAvInntektsfoertUtbytte"), do: :fradrag
+  defp pf_kategori("skattepliktigDelAvUtbytterOgUtdelinger"), do: :tillegg
+
+  defp pf_kategori("regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter"),
+    do: :fradrag
+
+  defp pf_kategori("regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter"),
+    do: :tillegg
+
+  defp pf_kategori(_), do: :ignore
 
   # The 3 % addback under skatteloven § 2-38 (6) is a tillegg to skattepliktig
   # inntekt. Rounding it down (taxpayer-favorable) is the convention used by
@@ -777,6 +822,7 @@ defmodule Wenche.SkattemeldingXml do
     |> String.trim_trailing()
   end
 
+  @spec resultatregnskap_block(Wenche.Models.Resultatregnskap.t()) :: String.t()
   defp resultatregnskap_block(r) do
     alias Wenche.Models.{Driftsinntekter, Driftskostnader, Finansposter, Resultatregnskap}
     di = r.driftsinntekter
@@ -931,11 +977,11 @@ defmodule Wenche.SkattemeldingXml do
     |> String.trim_trailing()
   end
 
+  @spec balanseregnskap_block(Wenche.Models.Balanse.t()) :: String.t()
   defp balanseregnskap_block(b) do
     alias Wenche.Models.{
       Anleggsmidler,
       Egenkapital,
-      EgenkapitalOgGjeld,
       Eiendeler,
       KortsiktigGjeld,
       LangsiktigGjeld,
@@ -996,7 +1042,12 @@ defmodule Wenche.SkattemeldingXml do
     sum_kg = KortsiktigGjeld.sum(eog.kortsiktig_gjeld)
     sum_ek = Egenkapital.sum(eog.egenkapital)
     sum_eiendel = Eiendeler.sum(b.eiendeler)
-    sum_gjeld_og_ek = EgenkapitalOgGjeld.sum(eog)
+    # SKD recomputes `sumGjeldOgEgenkapital` from the children we declared
+    # (`sumLangsiktigGjeld + sumKortsiktigGjeld + sumEgenkapital`). Use the
+    # same arithmetic so the cross-validation matches — falling back to
+    # `EgenkapitalOgGjeld.sum(eog)` reintroduces a 1 kr avvik when raw
+    # decimals round once instead of summing already-rounded ints.
+    sum_gjeld_og_ek = sum_lg + sum_kg + sum_ek
 
     anleggsmiddel_block =
       wrap_balanseverdi(
@@ -1096,21 +1147,22 @@ defmodule Wenche.SkattemeldingXml do
     # langsiktigGjeld, kortsiktigGjeld, egenkapital. The sum-* elements are
     # derived but SKD flags them as `manglerNaeringsopplysninger` when
     # omitted.
+    # Omit `sumLangsiktigGjeld` when 0 — SKD raises a `mottattVerdi 0.00`
+    # informational avvik when the element is present with no balance.
     sum_xml =
-      case sums do
-        [] ->
-          ""
-
-        _ ->
-          Enum.map_join(
-            [
-              {"sumLangsiktigGjeld", Keyword.get(sums, :sum_lg, 0)},
-              {"sumKortsiktigGjeld", Keyword.get(sums, :sum_kg, 0)},
-              {"sumEgenkapital", Keyword.get(sums, :sum_ek, 0)}
-            ],
-            "\n",
-            fn {tag, value} -> "      " <> beloep_med_skattemessige(tag, value) end
-          ) <> "\n"
+      [
+        {"sumLangsiktigGjeld", Keyword.get(sums, :sum_lg, 0)},
+        {"sumKortsiktigGjeld", Keyword.get(sums, :sum_kg, 0)},
+        {"sumEgenkapital", Keyword.get(sums, :sum_ek, 0)}
+      ]
+      |> Enum.reject(fn {tag, value} -> tag == "sumLangsiktigGjeld" and value == 0 end)
+      |> Enum.map_join(
+        "\n",
+        fn {tag, value} -> "      " <> beloep_med_skattemessige(tag, value) end
+      )
+      |> case do
+        "" -> ""
+        joined -> joined <> "\n"
       end
 
     parts =
@@ -1139,6 +1191,7 @@ defmodule Wenche.SkattemeldingXml do
     acc ++ ["      <egenkapital>\n#{Enum.join(forekomster, "\n")}\n      </egenkapital>"]
   end
 
+  @spec virksomhet_block(integer(), map() | nil) :: String.t()
   defp virksomhet_block(aar, kontaktperson) do
     inner =
       [

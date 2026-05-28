@@ -135,8 +135,10 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~ "<verdsettingAvAksje>"
       assert xml =~ "<samletVerdiBakAksjeneISelskapet>"
       assert xml =~ "<beloepSomHeltall>283457</beloepSomHeltall>"
-      assert xml =~ "<erOverstyrt>"
-      assert xml =~ "<boolsk>true</boolsk>"
+
+      # These values are computed from regnskap, not user-overridden — we
+      # intentionally do not emit `<erOverstyrt><boolsk>true</boolsk></erOverstyrt>`.
+      refute xml =~ "<erOverstyrt>"
     end
 
     test "samlet_verdi_bak_aksjene overrides formuesverdi_aksjer" do
@@ -294,6 +296,76 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~ "<skattemessigResultat>"
       assert xml =~ "<sumTilleggINaeringsinntekt>"
       assert xml =~ "<sumFradragINaeringsinntekt>"
+    end
+
+    test "permanent forskjell sums are sum-of-rounded-ints, not round-once" do
+      # Two tap entries (tillegg) with raw decimals 366.49 + 1512.49 = 1878.98.
+      # Round-once half_up = 1879; rounded-then-summed = 366 + 1512 = 1878.
+      # SKD validates the latter — round-once produces a rotaarsakNaerings-
+      # opplysninger avvik on sumTilleggINaeringsinntekt.
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          permanent_forskjeller: [
+            %{
+              type: :regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter,
+              beloep: Decimal.new("366.49")
+            },
+            %{
+              type: :regnskapsmessigTapVedRealisasjonAvFinansielleInstrumenter,
+              beloep: Decimal.new("1512.49")
+            }
+          ]
+        )
+
+      # sumTilleggINaeringsinntekt is a BeloepMedSkattemessige (2 levels of
+      # `<beloep>`, value formatted with `.00`).
+      assert xml =~ ~r/<sumTilleggINaeringsinntekt>\s*<beloep>\s*<beloep>1878\.00<\/beloep>/
+      refute xml =~ ~r/<sumTilleggINaeringsinntekt>\s*<beloep>\s*<beloep>1879\.00<\/beloep>/
+    end
+
+    test "naeringsspesifikasjon omits sumLangsiktigGjeld when 0" do
+      regnskap = sample_regnskap()
+
+      regnskap =
+        put_in(
+          regnskap.balanse.egenkapital_og_gjeld.langsiktig_gjeld,
+          %Wenche.Models.LangsiktigGjeld{}
+        )
+
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(regnskap)
+
+      refute xml =~ "<sumLangsiktigGjeld>"
+    end
+
+    test "egenkapitalavstemming omits sumFradragIEgenkapital when 0" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      refute xml =~ "<sumFradragIEgenkapital>"
+    end
+
+    test "sumGjeldOgEgenkapital equals sum_lg + sum_kg + sum_ek (not round-once)" do
+      # Extract the sumGjeldOgEgenkapital declared value and the
+      # sum_lg/sum_kg/sum_ek declared values. SKD validates them as equal.
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      total =
+        Regex.run(
+          ~r/<sumGjeldOgEgenkapital>\s*<beloep>\s*<beloep>(-?\d+)(?:\.\d+)?<\/beloep>/,
+          xml
+        )
+        |> Enum.at(1)
+        |> String.to_integer()
+
+      sum_of_parts =
+        Regex.scan(
+          ~r/<(sumKortsiktigGjeld|sumEgenkapital|sumLangsiktigGjeld)>\s*<beloep>\s*<beloep>(-?\d+)(?:\.\d+)?<\/beloep>/,
+          xml
+        )
+        |> Enum.map(fn [_, _, v] -> String.to_integer(v) end)
+        |> Enum.sum()
+
+      assert total == sum_of_parts
     end
 
     test "skattemelding emits derived inntektOgUnderskudd fields" do
