@@ -136,9 +136,11 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~ "<samletVerdiBakAksjeneISelskapet>"
       assert xml =~ "<beloepSomHeltall>283457</beloepSomHeltall>"
 
-      # These values are computed from regnskap, not user-overridden — we
-      # intentionally do not emit `<erOverstyrt><boolsk>true</boolsk></erOverstyrt>`.
-      refute xml =~ "<erOverstyrt>"
+      # SKD requires <erOverstyrt><boolsk>true</boolsk></erOverstyrt> on
+      # these manually-emitted values — without the flag, SKD discards them
+      # and raises N_MANGLER_VERDI_BAK_AKSJENE.
+      assert xml =~ "<erOverstyrt>"
+      assert xml =~ "<boolsk>true</boolsk>"
     end
 
     test "samlet_verdi_bak_aksjene overrides formuesverdi_aksjer" do

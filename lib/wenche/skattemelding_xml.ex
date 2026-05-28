@@ -380,15 +380,23 @@ defmodule Wenche.SkattemeldingXml do
     end
   end
 
-  # No `<erOverstyrt>` wrapper — we compute these values from regnskap data,
-  # we never override them, so signalling "the taxpayer manually overrode
-  # this" is incorrect (and noisy for SKD's audit trail).
+  # `<erOverstyrt><boolsk>true</boolsk></erOverstyrt>` is REQUIRED, not
+  # decorative. Without it SKD silently discards the value and falls back
+  # to its pre-filled draft (which is empty for a fresh year), producing
+  # `avvikSkattemelding` (`mottattVerdi` with no `beregnetVerdi`) and the
+  # `N_MANGLER_VERDI_BAK_AKSJENE` veiledning. The flag tells SKD "the
+  # taxpayer is overriding the pre-fill" — which is exactly what we're
+  # doing when emitting these computed-from-regnskap values into the
+  # skattemelding draft.
   defp overstyrt_heltall(tag, value) do
     """
     <#{tag}>
       <beloep>
         <beloepSomHeltall>#{value}</beloepSomHeltall>
       </beloep>
+      <erOverstyrt>
+        <boolsk>true</boolsk>
+      </erOverstyrt>
     </#{tag}>
     """
     |> String.trim()
