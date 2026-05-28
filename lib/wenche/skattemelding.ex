@@ -484,11 +484,6 @@ defmodule Wenche.Skattemelding do
   treated as the entire build-up of EK.
   """
   def beregn_egenkapitalavstemming(%Aarsregnskap{} = regnskap) do
-    rf_1028 = beregn_skattemelding(regnskap.resultatregnskap, %SkattemeldingKonfig{})
-
-    aarsresultat =
-      Resultatregnskap.resultat_foer_skatt(regnskap.resultatregnskap) - rf_1028.beregnet_skatt
-
     ek_ub = regnskap.balanse.egenkapital_og_gjeld.egenkapital
     utgaaende_ek = ek_ub.aksjekapital + ek_ub.overkursfond + ek_ub.annen_egenkapital
 
@@ -496,7 +491,7 @@ defmodule Wenche.Skattemelding do
       regnskap.foregaaende_aar_resultat != %Resultatregnskap{} or
         regnskap.foregaaende_aar_balanse != %Balanse{}
 
-    {inngaaende_ek, kapital_delta, annen_residual} =
+    {inngaaende_ek, kapital_delta, aarsresultat, annen_residual} =
       if har_fjoraar do
         ek_ib = regnskap.foregaaende_aar_balanse.egenkapital_og_gjeld.egenkapital
         ib = ek_ib.aksjekapital + ek_ib.overkursfond + ek_ib.annen_egenkapital
@@ -505,13 +500,15 @@ defmodule Wenche.Skattemelding do
           ek_ub.aksjekapital - ek_ib.aksjekapital +
             (ek_ub.overkursfond - ek_ib.overkursfond)
 
-        residual =
-          ek_ub.annen_egenkapital -
-            (ek_ib.annen_egenkapital + aarsresultat - regnskap.utbytte_utbetalt)
+        aarsresultat =
+          ek_ub.annen_egenkapital - ek_ib.annen_egenkapital + regnskap.utbytte_utbetalt
 
-        {ib, kap_delta, residual}
+        {ib, kap_delta, aarsresultat, 0}
       else
-        {0, 0, ek_ub.annen_egenkapital - (aarsresultat - regnskap.utbytte_utbetalt)}
+        kap_delta = ek_ub.aksjekapital + ek_ub.overkursfond
+        aarsresultat = ek_ub.annen_egenkapital + regnskap.utbytte_utbetalt
+
+        {0, kap_delta, aarsresultat, 0}
       end
 
     endringer =

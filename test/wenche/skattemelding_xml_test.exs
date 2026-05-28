@@ -1,6 +1,7 @@
 defmodule Wenche.SkattemeldingXmlTest do
   use ExUnit.Case, async: true
 
+  alias Wenche.Skattemelding
   alias Wenche.SkattemeldingXml
 
   alias Wenche.Models.{
@@ -330,6 +331,52 @@ defmodule Wenche.SkattemeldingXmlTest do
       revisor_idx = :binary.match(xml, "<skalBekreftesAvRevisor>") |> elem(0)
       assert virksomhet_idx < avstemming_idx
       assert avstemming_idx < revisor_idx
+    end
+
+    test "egenkapitalavstemming does not split annual result by phantom tax" do
+      regnskap = %Aarsregnskap{
+        resultatregnskap: %Resultatregnskap{
+          driftsinntekter: %Driftsinntekter{salgsinntekter: 30_000},
+          driftskostnader: %Driftskostnader{andre_driftskostnader: 36_313},
+          finansposter: %Finansposter{
+            utbytte_fra_datterselskap: 50_429,
+            andre_finansinntekter: 67,
+            andre_finanskostnader: 522
+          }
+        },
+        balanse: %Balanse{
+          egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+            egenkapital: %Egenkapital{
+              aksjekapital: 30_000,
+              annen_egenkapital: 30_395
+            }
+          }
+        },
+        foregaaende_aar_balanse: %Balanse{
+          egenkapital_og_gjeld: %EgenkapitalOgGjeld{
+            egenkapital: %Egenkapital{
+              aksjekapital: 30_000,
+              annen_egenkapital: -13_266
+            }
+          }
+        }
+      }
+
+      assert Resultatregnskap.aarsresultat(regnskap.resultatregnskap) == 43_661
+
+      assert %{
+               inngaaende_ek: 16_734,
+               utgaaende_ek: 60_395,
+               sum_tillegg: 43_661,
+               sum_fradrag: 0,
+               endringer: [
+                 %{
+                   type: "aaretsOverskudd",
+                   kategori: :tillegg,
+                   beloep: 43_661
+                 }
+               ]
+             } = Skattemelding.beregn_egenkapitalavstemming(regnskap)
     end
 
     test "opplysningOmSkattesubjekt sits after formueOgGjeld per XSD child order" do
