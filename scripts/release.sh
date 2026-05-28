@@ -33,4 +33,4 @@ else
   git push
 fi
 
-mix release
+mix hex.publish
