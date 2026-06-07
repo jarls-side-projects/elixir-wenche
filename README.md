@@ -21,7 +21,9 @@ Ported from the Python CLI tool [Wenche](https://github.com/olefredrik/Wenche).
 | `Wenche.Noter` | Notes (noter) for small enterprises — structured XML + iXBRL text | `wenche/noter.py` |
 | `Wenche.Skattemelding` | Tax calculation, structured `beregn/2`, and Altinn 3 submission orchestration for skattemelding (RF-1028/RF-1167) | `wenche/skattemelding.py` |
 | `Wenche.SkattemeldingXml` | Skattemelding XML (`skattemeldingUpersonlig` v5, `naeringsspesifikasjon` v6, request envelope v2) against Skatteetaten XSDs | — |
-| `Wenche.SkdSkattemeldingClient` | Skatteetaten REST API client for skattemelding (pre-filled draft, valider) | — |
+| `Wenche.SkattemeldingPersonlig` | Validation + Altinn 3 submission of the personlig skattemelding for ENK (enkeltpersonforetak) | — |
+| `Wenche.SkattemeldingPersonligXml` | Personlig skattemelding XML (`skattemelding` v13) against Skatteetaten XSDs | — |
+| `Wenche.SkdSkattemeldingClient` | Skatteetaten REST API client for skattemelding (pre-filled draft, valider; personlig + upersonlig) | — |
 | `Wenche.MvaMelding` | VAT return (MVA-melding) submission via Altinn 3. **Experimental.** | — |
 | `Wenche.MvaMeldingXml` | MVA-melding XML generation (`mvaMeldingInnsending` + `mvaMeldingDto`) | — |
 | `Wenche.Aksjonaerregister` | RF-1086 shareholder register XML generation | `wenche/aksjonaerregister.py` |

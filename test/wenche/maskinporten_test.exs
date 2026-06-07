@@ -88,7 +88,9 @@ defmodule Wenche.MaskinportenTest do
       ]
 
       assert {:ok, jwt} =
-               Maskinporten.build_jwt_grant(config, "brreg:data:enhetsregisteret:roller:person:oppslag:fnr",
+               Maskinporten.build_jwt_grant(
+                 config,
+                 "brreg:data:enhetsregisteret:roller:person:oppslag:fnr",
                  resource: "https://data.ppe.brreg.no/enhetsregisteret/autorisert-api"
                )
 

@@ -215,6 +215,30 @@ defmodule Wenche.SkdSkattemeldingClient do
     the schema; may be nil if not present).
   """
   def hent_utkast_referanse(%__MODULE__{} = client, year, org_nr) do
+    do_hent_utkast_referanse(client, year, org_nr, &SkattemeldingXml.hent_partsnummer/1)
+  end
+
+  @doc """
+  Personlig (ENK) analogue of `hent_utkast_referanse/3`.
+
+  Identical flow, but the taxpayer ID is read from the inner document's
+  `<partsreferanse>` (personlig) rather than `<partsnummer>` (upersonlig). The
+  returned `:partsnummer` key carries the resolved partsreferanse so callers can
+  treat both flows uniformly.
+
+  Returns `{:ok, %{partsnummer: integer, skattemelding_id: binary | nil,
+  naering_id: binary | nil}}` or `{:error, reason}`.
+  """
+  def hent_utkast_referanse_personlig(%__MODULE__{} = client, year, org_nr) do
+    do_hent_utkast_referanse(
+      client,
+      year,
+      org_nr,
+      &Wenche.SkattemeldingPersonligXml.hent_partsreferanse/1
+    )
+  end
+
+  defp do_hent_utkast_referanse(%__MODULE__{} = client, year, org_nr, partsid_fun) do
     url = "#{client.base}/#{year}/#{org_nr}"
 
     request_headers = [
@@ -232,7 +256,7 @@ defmodule Wenche.SkdSkattemeldingClient do
            ),
          %{xml: inner_xml, skattemelding_id: sm_id, naering_id: ne_id} <-
            parse_forespoersel_response(body),
-         {:ok, partsnummer} <- SkattemeldingXml.hent_partsnummer(inner_xml) do
+         {:ok, partsnummer} <- partsid_fun.(inner_xml) do
       {:ok, %{partsnummer: partsnummer, skattemelding_id: sm_id, naering_id: ne_id}}
     else
       {:ok, %Req.Response{status: status, body: body}} ->
@@ -246,7 +270,7 @@ defmodule Wenche.SkdSkattemeldingClient do
 
       other when is_binary(other) ->
         # parse returned just XML (no wrapper) → no dokumentidentifikator
-        case SkattemeldingXml.hent_partsnummer(other) do
+        case partsid_fun.(other) do
           {:ok, partsnummer} ->
             {:ok, %{partsnummer: partsnummer, skattemelding_id: nil, naering_id: nil}}
 
