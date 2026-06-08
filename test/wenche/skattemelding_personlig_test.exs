@@ -149,6 +149,12 @@ defmodule Wenche.SkattemeldingPersonligTest do
       assert decoded =~ "<partsreferanse>9001</partsreferanse>"
       refute decoded =~ "<partsreferanse>912345678</partsreferanse>"
 
+      # The næringsspesifikasjon (second <dokument>) carries the personinntekt allocation.
+      naering_decoded = decode_second_dokument(posted)
+      assert naering_decoded =~ "<beregnetPersoninntekt>"
+      assert naering_decoded =~ "<fordeltBeregnetPersoninntekt>"
+      assert naering_decoded =~ "<prosent>100</prosent>"
+
       # dokumentreferanse points back at both draft documents.
       assert posted =~ "<dokumenttype>skattemeldingPersonlig</dokumenttype>"
       assert posted =~ "<dokumentidentifikator>SKI:755:PERSONLIG1</dokumentidentifikator>"
@@ -223,10 +229,15 @@ defmodule Wenche.SkattemeldingPersonligTest do
     end
   end
 
-  # Decodes the base64 <content> of the first <dokument> in the request envelope —
-  # that's the skattemelding document.
+  # Decodes the base64 <content> of the first <dokument> — the skattemelding document.
   defp decode_first_dokument(envelope) do
-    [_, b64] = Regex.run(~r{<content>([^<]+)</content>}, envelope)
+    [[_, b64] | _] = Regex.scan(~r{<content>([^<]+)</content>}, envelope)
+    Base.decode64!(String.replace(b64, ~r/\s+/, ""))
+  end
+
+  # Decodes the base64 <content> of the second <dokument> — the næringsspesifikasjon.
+  defp decode_second_dokument(envelope) do
+    [_, [_, b64]] = Regex.scan(~r{<content>([^<]+)</content>}, envelope)
     Base.decode64!(String.replace(b64, ~r/\s+/, ""))
   end
 end

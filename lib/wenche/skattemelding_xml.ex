@@ -667,6 +667,9 @@ defmodule Wenche.SkattemeldingXml do
     beregnet_naeringsinntekt =
       beregnet_naeringsinntekt_block(skattepliktig_brutto, skattepliktig_type)
 
+    beregnet_personinntekt =
+      if skattepliktig_type == :personlig, do: beregnet_personinntekt_block(), else: ""
+
     egenkapitalavstemming =
       regnskap
       |> Wenche.Skattemelding.beregn_egenkapitalavstemming()
@@ -681,6 +684,7 @@ defmodule Wenche.SkattemeldingXml do
         resultatregnskap_block(r),
         balanseregnskap_block(b),
         beregnet_naeringsinntekt,
+        beregnet_personinntekt,
         permanent_forskjeller,
         virksomhet_block(aar, kontaktperson, skattepliktig_type),
         egenkapitalavstemming,
@@ -789,6 +793,31 @@ defmodule Wenche.SkattemeldingXml do
         </fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>
         #{beloep_med_skattemessige("skattemessigResultat", skattepliktig_brutto)}
       </beregnetNaeringsinntekt>
+    """
+    |> String.trim_trailing()
+  end
+
+  # ENK (personlig): allocates 100% of personinntekt to the sole owner.
+  # The XSD sequence puts <beregnetPersoninntekt> between <beregnetNaeringsinntekt>
+  # and <forskjellMellomRegnskapsmessigOgSkattemessigVerdi>. The identifikator fields
+  # link this entry to the fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf
+  # block with id "1" emitted in beregnet_naeringsinntekt_block/2.
+  defp beregnet_personinntekt_block do
+    """
+      <beregnetPersoninntekt>
+        <fordeltBeregnetPersoninntekt>
+          <id>1</id>
+          <identifikatorForFordeltBeregnetPersoninntekt>
+            <tekst>1</tekst>
+          </identifikatorForFordeltBeregnetPersoninntekt>
+          <identifikatorForFordeltBeregnetNaeringsinntekt>
+            <tekst>1</tekst>
+          </identifikatorForFordeltBeregnetNaeringsinntekt>
+          <andelAvPersoninntektTilordnetInnehaver>
+            <prosent>100</prosent>
+          </andelAvPersoninntektTilordnetInnehaver>
+        </fordeltBeregnetPersoninntekt>
+      </beregnetPersoninntekt>
     """
     |> String.trim_trailing()
   end

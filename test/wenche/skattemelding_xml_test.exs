@@ -900,6 +900,62 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~
                ~r{regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter.*?<beloep>101</beloep>}s
     end
+
+    test "emits beregnetPersoninntekt with 100% allocation for skattepliktig_type: :personlig" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      assert xml =~ "<beregnetPersoninntekt>"
+      assert xml =~ "<fordeltBeregnetPersoninntekt>"
+      assert xml =~ "<prosent>100</prosent>"
+      assert xml =~ "<tekst>1</tekst>"
+      assert xml =~ "<identifikatorForFordeltBeregnetPersoninntekt>"
+      assert xml =~ "<identifikatorForFordeltBeregnetNaeringsinntekt>"
+      assert xml =~ "<andelAvPersoninntektTilordnetInnehaver>"
+    end
+
+    test "beregnetPersoninntekt links id 1 to the næringsresultat block id 1" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      # Both the næringsresultat block (beregnetNaeringsinntekt/fordeltBeregnet.../id)
+      # and the personinntekt linking field reference id "1".
+      naering_id_idx = :binary.match(xml, "<fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>") |> elem(0)
+      personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
+      assert naering_id_idx < personinntekt_idx
+
+      assert xml =~
+               ~r{<identifikatorForFordeltBeregnetNaeringsinntekt>\s*<tekst>1</tekst>\s*</identifikatorForFordeltBeregnetNaeringsinntekt>}s
+    end
+
+    test "beregnetPersoninntekt is placed between beregnetNaeringsinntekt and forskjell" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig,
+          permanent_forskjeller: [%{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 1000}]
+        )
+
+      naering_idx = :binary.match(xml, "<beregnetNaeringsinntekt>") |> elem(0)
+      personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
+      forskjell_idx = :binary.match(xml, "<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>") |> elem(0)
+
+      assert naering_idx < personinntekt_idx
+      assert personinntekt_idx < forskjell_idx
+    end
+
+    test "beregnetPersoninntekt is omitted for upersonlig (AS default)" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      refute xml =~ "<beregnetPersoninntekt>"
+      refute xml =~ "<fordeltBeregnetPersoninntekt>"
+    end
   end
 
   describe "generer_request_xml/3" do
