@@ -956,6 +956,60 @@ defmodule Wenche.SkattemeldingXmlTest do
       refute xml =~ "<beregnetPersoninntekt>"
       refute xml =~ "<fordeltBeregnetPersoninntekt>"
     end
+
+    test "personlig næringsresultat includes fordeltSkattemessigResultatEtterKorreksjon" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      assert xml =~ "<fordeltSkattemessigResultatEtterKorreksjon>"
+
+      # Must appear inside the næringsresultat block, before beregnetPersoninntekt
+      naering_idx = :binary.match(xml, "<beregnetNaeringsinntekt>") |> elem(0)
+      korreksjon_idx = :binary.match(xml, "<fordeltSkattemessigResultatEtterKorreksjon>") |> elem(0)
+      personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
+      assert naering_idx < korreksjon_idx
+      assert korreksjon_idx < personinntekt_idx
+    end
+
+    test "rentekostnadPaaForetaksgjeld is emitted when rentekostnader > 0" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      # sample_regnskap has rentekostnader: 10_000
+      assert xml =~ "<rentekostnadPaaForetaksgjeld>"
+
+      # Must appear inside fordeltBeregnetPersoninntekt, before andelAvPersoninntektTilordnetInnehaver
+      assert xml =~
+               ~r{<rentekostnadPaaForetaksgjeld>.*?<andelAvPersoninntektTilordnetInnehaver>}s
+    end
+
+    test "rentekostnadPaaForetaksgjeld is omitted when rentekostnader is 0" do
+      regnskap_uten_renter =
+        put_in(
+          sample_regnskap(),
+          [Access.key(:resultatregnskap), Access.key(:finansposter), Access.key(:rentekostnader)],
+          0
+        )
+
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          regnskap_uten_renter,
+          skattepliktig_type: :personlig
+        )
+
+      refute xml =~ "<rentekostnadPaaForetaksgjeld>"
+    end
+
+    test "rentekostnadPaaForetaksgjeld is omitted for upersonlig regardless of rentekostnader" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+      refute xml =~ "<rentekostnadPaaForetaksgjeld>"
+    end
   end
 
   describe "generer_request_xml/3" do

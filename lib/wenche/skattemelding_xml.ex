@@ -667,8 +667,12 @@ defmodule Wenche.SkattemeldingXml do
     beregnet_naeringsinntekt =
       beregnet_naeringsinntekt_block(skattepliktig_brutto, skattepliktig_type)
 
+    rentekostnader = regnskap.resultatregnskap.finansposter.rentekostnader
+
     beregnet_personinntekt =
-      if skattepliktig_type == :personlig, do: beregnet_personinntekt_block(), else: ""
+      if skattepliktig_type == :personlig,
+        do: beregnet_personinntekt_block(rentekostnader),
+        else: ""
 
     egenkapitalavstemming =
       regnskap
@@ -781,15 +785,18 @@ defmodule Wenche.SkattemeldingXml do
 
   # ENK (personlig skattepliktig): the næringsresultat is allocated to the
   # innehaver via `fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf`.
-  # `fordeltSkattemessigResultatEtterKorreksjon` is `erAvledet="true"` on the
-  # personlig type, so SKD derives it — we don't emit it (unlike the
-  # upersonlig variant, where it is not derived and we send it explicitly).
+  # `fordeltSkattemessigResultatEtterKorreksjon` is `erAvledet="true"` in the XSD
+  # but real-world submissions flag `manglerNaeringsopplysninger` when omitted —
+  # the same behaviour seen for the upersonlig variant. We emit it explicitly to
+  # prevent that avvik, matching SKD's computed value (= fordeltSkattemessigResultat
+  # for a single-virksomhet ENK with no korreksjon).
   defp beregnet_naeringsinntekt_block(skattepliktig_brutto, :personlig) do
     """
       <beregnetNaeringsinntekt>
         <fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>
           <id>1</id>
           #{beloep_med_skattemessige("fordeltSkattemessigResultat", skattepliktig_brutto)}
+          #{beloep_med_skattemessige("fordeltSkattemessigResultatEtterKorreksjon", skattepliktig_brutto)}
         </fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>
         #{beloep_med_skattemessige("skattemessigResultat", skattepliktig_brutto)}
       </beregnetNaeringsinntekt>
@@ -802,24 +809,38 @@ defmodule Wenche.SkattemeldingXml do
   # and <forskjellMellomRegnskapsmessigOgSkattemessigVerdi>. The identifikator fields
   # link this entry to the fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf
   # block with id "1" emitted in beregnet_naeringsinntekt_block/2.
-  defp beregnet_personinntekt_block do
-    """
-      <beregnetPersoninntekt>
-        <fordeltBeregnetPersoninntekt>
-          <id>1</id>
-          <identifikatorForFordeltBeregnetPersoninntekt>
-            <tekst>1</tekst>
-          </identifikatorForFordeltBeregnetPersoninntekt>
-          <identifikatorForFordeltBeregnetNaeringsinntekt>
-            <tekst>1</tekst>
-          </identifikatorForFordeltBeregnetNaeringsinntekt>
-          <andelAvPersoninntektTilordnetInnehaver>
-            <prosent>100</prosent>
-          </andelAvPersoninntektTilordnetInnehaver>
-        </fordeltBeregnetPersoninntekt>
-      </beregnetPersoninntekt>
-    """
-    |> String.trim_trailing()
+  # `rentekostnadPaaForetaksgjeld` is optional but reduces personinntekt when present;
+  # emitting it prevents SKD from computing a higher trygdeavgift base than warranted.
+  defp beregnet_personinntekt_block(rentekostnader) do
+    rentekostnad_xml =
+      if rentekostnader > 0 do
+        "          " <> beloep_med_skattemessige("rentekostnadPaaForetaksgjeld", rentekostnader)
+      else
+        ""
+      end
+
+    parts =
+      [
+        "      <beregnetPersoninntekt>",
+        "        <fordeltBeregnetPersoninntekt>",
+        "          <id>1</id>",
+        "          <identifikatorForFordeltBeregnetPersoninntekt>",
+        "            <tekst>1</tekst>",
+        "          </identifikatorForFordeltBeregnetPersoninntekt>",
+        "          <identifikatorForFordeltBeregnetNaeringsinntekt>",
+        "            <tekst>1</tekst>",
+        "          </identifikatorForFordeltBeregnetNaeringsinntekt>",
+        rentekostnad_xml,
+        "          <andelAvPersoninntektTilordnetInnehaver>",
+        "            <prosent>100</prosent>",
+        "          </andelAvPersoninntektTilordnetInnehaver>",
+        "        </fordeltBeregnetPersoninntekt>",
+        "      </beregnetPersoninntekt>"
+      ]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+
+    parts
   end
 
   defp normalize_permanent_forskjell(%{type: type, beloep: b} = entry) do
