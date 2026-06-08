@@ -627,6 +627,12 @@ defmodule Wenche.SkattemeldingXml do
 
   ## Options
 
+  - `:skattepliktig_type` — `:upersonlig` (default, AS) or `:personlig` (ENK).
+    Switches the `beregnetNaeringsinntekt` allocation
+    (`fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf` vs
+    `...ForUpersonligSkattepliktig`) and the `<virksomhet>` characteristics
+    (`enkeltpersonforetak` / `begrensetRegnskapsplikt` vs `oevrigSelskap` /
+    `fullRegnskapsplikt`).
   - `:partsnummer` — Skatteetaten's integer ID. Defaults to
     `aarsregnskap.selskap.org_nummer`.
   - `:permanent_forskjeller` — list of maps emitted as
@@ -651,12 +657,22 @@ defmodule Wenche.SkattemeldingXml do
     b = regnskap.balanse
     skal_revisor = if regnskap.revideres, do: "true", else: "false"
     kontaktperson = Keyword.get(opts, :kontaktperson)
+    skattepliktig_type = Keyword.get(opts, :skattepliktig_type, :upersonlig)
 
     pf_entries = Keyword.get(opts, :permanent_forskjeller, [])
     permanent_forskjeller = generer_permanent_forskjell_block(pf_entries)
 
     skattepliktig_brutto = Wenche.Skattemelding.derive_skattepliktig_brutto(regnskap, pf_entries)
-    beregnet_naeringsinntekt = beregnet_naeringsinntekt_block(skattepliktig_brutto)
+
+    beregnet_naeringsinntekt =
+      beregnet_naeringsinntekt_block(skattepliktig_brutto, skattepliktig_type)
+
+    rentekostnader = regnskap.resultatregnskap.finansposter.rentekostnader
+
+    beregnet_personinntekt =
+      if skattepliktig_type == :personlig,
+        do: beregnet_personinntekt_block(rentekostnader),
+        else: ""
 
     egenkapitalavstemming =
       regnskap
@@ -672,8 +688,9 @@ defmodule Wenche.SkattemeldingXml do
         resultatregnskap_block(r),
         balanseregnskap_block(b),
         beregnet_naeringsinntekt,
+        beregnet_personinntekt,
         permanent_forskjeller,
-        virksomhet_block(aar, kontaktperson),
+        virksomhet_block(aar, kontaktperson, skattepliktig_type),
         egenkapitalavstemming,
         "  <skalBekreftesAvRevisor>#{skal_revisor}</skalBekreftesAvRevisor>",
         "</naeringsspesifikasjon>"
@@ -751,8 +768,8 @@ defmodule Wenche.SkattemeldingXml do
   # missing from the submission. We always emit it once we have a regnskap
   # — fordeltSkattemessigResultat at id="1" carries the full year for an
   # ordinary AS (single virksomhet).
-  @spec beregnet_naeringsinntekt_block(integer()) :: String.t()
-  defp beregnet_naeringsinntekt_block(skattepliktig_brutto) do
+  @spec beregnet_naeringsinntekt_block(integer(), :upersonlig | :personlig) :: String.t()
+  defp beregnet_naeringsinntekt_block(skattepliktig_brutto, :upersonlig) do
     """
       <beregnetNaeringsinntekt>
         <fordeltBeregnetNaeringsinntektForUpersonligSkattepliktig>
@@ -764,6 +781,66 @@ defmodule Wenche.SkattemeldingXml do
       </beregnetNaeringsinntekt>
     """
     |> String.trim_trailing()
+  end
+
+  # ENK (personlig skattepliktig): the næringsresultat is allocated to the
+  # innehaver via `fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf`.
+  # `fordeltSkattemessigResultatEtterKorreksjon` is `erAvledet="true"` in the XSD
+  # but real-world submissions flag `manglerNaeringsopplysninger` when omitted —
+  # the same behaviour seen for the upersonlig variant. We emit it explicitly to
+  # prevent that avvik, matching SKD's computed value (= fordeltSkattemessigResultat
+  # for a single-virksomhet ENK with no korreksjon).
+  defp beregnet_naeringsinntekt_block(skattepliktig_brutto, :personlig) do
+    """
+      <beregnetNaeringsinntekt>
+        <fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>
+          <id>1</id>
+          #{beloep_med_skattemessige("fordeltSkattemessigResultat", skattepliktig_brutto)}
+          #{beloep_med_skattemessige("fordeltSkattemessigResultatEtterKorreksjon", skattepliktig_brutto)}
+        </fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>
+        #{beloep_med_skattemessige("skattemessigResultat", skattepliktig_brutto)}
+      </beregnetNaeringsinntekt>
+    """
+    |> String.trim_trailing()
+  end
+
+  # ENK (personlig): allocates 100% of personinntekt to the sole owner.
+  # The XSD sequence puts <beregnetPersoninntekt> between <beregnetNaeringsinntekt>
+  # and <forskjellMellomRegnskapsmessigOgSkattemessigVerdi>. The identifikator fields
+  # link this entry to the fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf
+  # block with id "1" emitted in beregnet_naeringsinntekt_block/2.
+  # `rentekostnadPaaForetaksgjeld` is optional but reduces personinntekt when present;
+  # emitting it prevents SKD from computing a higher trygdeavgift base than warranted.
+  defp beregnet_personinntekt_block(rentekostnader) do
+    rentekostnad_xml =
+      if rentekostnader > 0 do
+        "          " <> beloep_med_skattemessige("rentekostnadPaaForetaksgjeld", rentekostnader)
+      else
+        ""
+      end
+
+    parts =
+      [
+        "      <beregnetPersoninntekt>",
+        "        <fordeltBeregnetPersoninntekt>",
+        "          <id>1</id>",
+        "          <identifikatorForFordeltBeregnetPersoninntekt>",
+        "            <tekst>1</tekst>",
+        "          </identifikatorForFordeltBeregnetPersoninntekt>",
+        "          <identifikatorForFordeltBeregnetNaeringsinntekt>",
+        "            <tekst>1</tekst>",
+        "          </identifikatorForFordeltBeregnetNaeringsinntekt>",
+        rentekostnad_xml,
+        "          <andelAvPersoninntektTilordnetInnehaver>",
+        "            <prosent>100</prosent>",
+        "          </andelAvPersoninntektTilordnetInnehaver>",
+        "        </fordeltBeregnetPersoninntekt>",
+        "      </beregnetPersoninntekt>"
+      ]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+
+    parts
   end
 
   defp normalize_permanent_forskjell(%{type: type, beloep: b} = entry) do
@@ -1199,34 +1276,54 @@ defmodule Wenche.SkattemeldingXml do
     acc ++ ["      <egenkapital>\n#{Enum.join(forekomster, "\n")}\n      </egenkapital>"]
   end
 
-  @spec virksomhet_block(integer(), map() | nil) :: String.t()
-  defp virksomhet_block(aar, kontaktperson) do
+  @spec virksomhet_block(integer(), map() | nil, :upersonlig | :personlig) :: String.t()
+  defp virksomhet_block(aar, kontaktperson, skattepliktig_type) do
+    {regnskapspliktstype, virksomhetstype, regeltype_lines} =
+      virksomhet_kjennetegn(skattepliktig_type)
+
     inner =
-      [
-        "    <regnskapspliktstype>",
-        "      <regnskapspliktstype>fullRegnskapsplikt</regnskapspliktstype>",
-        "    </regnskapspliktstype>",
-        "    <regnskapsperiode>",
-        "      <start>",
-        "        <dato>#{aar}-01-01</dato>",
-        "      </start>",
-        "      <slutt>",
-        "        <dato>#{aar}-12-31</dato>",
-        "      </slutt>",
-        "    </regnskapsperiode>",
-        "    <virksomhetstype>",
-        "      <virksomhetstype>oevrigSelskap</virksomhetstype>",
-        "    </virksomhetstype>",
-        "    <regeltypeForAarsregnskap>",
-        "      <regeltypeForAarsregnskap>regnskapslovensReglerForSmaaForetak</regeltypeForAarsregnskap>",
-        "    </regeltypeForAarsregnskap>",
-        kontaktperson_block(kontaktperson)
-      ]
+      ([
+         "    <regnskapspliktstype>",
+         "      <regnskapspliktstype>#{regnskapspliktstype}</regnskapspliktstype>",
+         "    </regnskapspliktstype>",
+         "    <regnskapsperiode>",
+         "      <start>",
+         "        <dato>#{aar}-01-01</dato>",
+         "      </start>",
+         "      <slutt>",
+         "        <dato>#{aar}-12-31</dato>",
+         "      </slutt>",
+         "    </regnskapsperiode>",
+         "    <virksomhetstype>",
+         "      <virksomhetstype>#{virksomhetstype}</virksomhetstype>",
+         "    </virksomhetstype>"
+       ] ++
+         regeltype_lines ++
+         [kontaktperson_block(kontaktperson)])
       |> Enum.reject(&(&1 == ""))
       |> Enum.join("\n")
 
     ("  <virksomhet>\n" <> inner <> "\n  </virksomhet>")
     |> String.trim_trailing()
+  end
+
+  # Returns `{regnskapspliktstype, virksomhetstype, regeltype_lines}` for the
+  # `<virksomhet>` block. An ordinary AS reports as `oevrigSelskap` under
+  # `fullRegnskapsplikt` and the small-enterprise rules. An ENK reports as
+  # `enkeltpersonforetak` under `begrensetRegnskapsplikt` and omits the
+  # `regeltypeForAarsregnskap` (optional in the XSD; not applicable when the
+  # enterprise only has bookkeeping — not full accounting — duty).
+  defp virksomhet_kjennetegn(:upersonlig) do
+    {"fullRegnskapsplikt", "oevrigSelskap",
+     [
+       "    <regeltypeForAarsregnskap>",
+       "      <regeltypeForAarsregnskap>regnskapslovensReglerForSmaaForetak</regeltypeForAarsregnskap>",
+       "    </regeltypeForAarsregnskap>"
+     ]}
+  end
+
+  defp virksomhet_kjennetegn(:personlig) do
+    {"begrensetRegnskapsplikt", "enkeltpersonforetak", []}
   end
 
   # Emits the optional `<kontaktperson>` element on `<virksomhet>`. Returns ""
@@ -1274,6 +1371,9 @@ defmodule Wenche.SkattemeldingXml do
   - `:innsendingsformaal` — `"egenfastsetting"` (default), `"klage"`, or `"endringsanmodning"`.
   - `:dokumentreferanse` — optional list of `{dokumenttype, dokumentidentifikator}` pairs to
     emit as `<dokumentreferanseTilGjeldendeDokument>` entries.
+  - `:skattemelding_dokumenttype` — `"skattemeldingUpersonlig"` (default, AS) or
+    `"skattemeldingPersonlig"` (ENK). Sets the `<type>` of the skattemelding
+    `<dokument>` entry.
   - `:opprettet_av` — text used for `<opprettetAv>` (default `"Wenche"`). Override
     to identify the originating end-user system.
   """
@@ -1284,6 +1384,15 @@ defmodule Wenche.SkattemeldingXml do
     innsendingsformaal = Keyword.get(opts, :innsendingsformaal, "egenfastsetting")
     dokumentreferanser = Keyword.get(opts, :dokumentreferanse, [])
     opprettet_av = Keyword.get(opts, :opprettet_av, @opprettet_av)
+
+    skattemelding_dokumenttype =
+      Keyword.get(opts, :skattemelding_dokumenttype, "skattemeldingUpersonlig")
+
+    validate_enum!(
+      :skattemelding_dokumenttype,
+      skattemelding_dokumenttype,
+      ~w(skattemeldingUpersonlig skattemeldingPersonlig)
+    )
 
     validate_enum!(:innsendingstype, innsendingstype, ~w(komplett ikkeKomplett))
 
@@ -1337,7 +1446,7 @@ defmodule Wenche.SkattemeldingXml do
         "  <dokumenter>",
         """
             <dokument>
-              <type>skattemeldingUpersonlig</type>
+              <type>#{skattemelding_dokumenttype}</type>
               <encoding>utf-8</encoding>
               <content>#{skattemelding_b64}</content>
             </dokument>

@@ -4,6 +4,7 @@ Apache License 2.0.
 
 Files:
   - skattemeldingUpersonlig_v5_ekstern.xsd
+  - skattemelding_v13_ekstern.xsd        (personlig skattepliktig — ENK)
   - naeringsspesifikasjon_v6_ekstern.xsd
   - skattemeldingognaeringsspesifikasjonrequest_v2.xsd
 

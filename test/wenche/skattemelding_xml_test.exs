@@ -900,6 +900,116 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~
                ~r{regnskapsmessigGevinstVedRealisasjonAvFinansielleInstrumenter.*?<beloep>101</beloep>}s
     end
+
+    test "emits beregnetPersoninntekt with 100% allocation for skattepliktig_type: :personlig" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      assert xml =~ "<beregnetPersoninntekt>"
+      assert xml =~ "<fordeltBeregnetPersoninntekt>"
+      assert xml =~ "<prosent>100</prosent>"
+      assert xml =~ "<tekst>1</tekst>"
+      assert xml =~ "<identifikatorForFordeltBeregnetPersoninntekt>"
+      assert xml =~ "<identifikatorForFordeltBeregnetNaeringsinntekt>"
+      assert xml =~ "<andelAvPersoninntektTilordnetInnehaver>"
+    end
+
+    test "beregnetPersoninntekt links id 1 to the næringsresultat block id 1" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      # Both the næringsresultat block (beregnetNaeringsinntekt/fordeltBeregnet.../id)
+      # and the personinntekt linking field reference id "1".
+      naering_id_idx = :binary.match(xml, "<fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>") |> elem(0)
+      personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
+      assert naering_id_idx < personinntekt_idx
+
+      assert xml =~
+               ~r{<identifikatorForFordeltBeregnetNaeringsinntekt>\s*<tekst>1</tekst>\s*</identifikatorForFordeltBeregnetNaeringsinntekt>}s
+    end
+
+    test "beregnetPersoninntekt is placed between beregnetNaeringsinntekt and forskjell" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig,
+          permanent_forskjeller: [%{type: :tilbakefoeringAvInntektsfoertUtbytte, beloep: 1000}]
+        )
+
+      naering_idx = :binary.match(xml, "<beregnetNaeringsinntekt>") |> elem(0)
+      personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
+      forskjell_idx = :binary.match(xml, "<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>") |> elem(0)
+
+      assert naering_idx < personinntekt_idx
+      assert personinntekt_idx < forskjell_idx
+    end
+
+    test "beregnetPersoninntekt is omitted for upersonlig (AS default)" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      refute xml =~ "<beregnetPersoninntekt>"
+      refute xml =~ "<fordeltBeregnetPersoninntekt>"
+    end
+
+    test "personlig næringsresultat includes fordeltSkattemessigResultatEtterKorreksjon" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      assert xml =~ "<fordeltSkattemessigResultatEtterKorreksjon>"
+
+      # Must appear inside the næringsresultat block, before beregnetPersoninntekt
+      naering_idx = :binary.match(xml, "<beregnetNaeringsinntekt>") |> elem(0)
+      korreksjon_idx = :binary.match(xml, "<fordeltSkattemessigResultatEtterKorreksjon>") |> elem(0)
+      personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
+      assert naering_idx < korreksjon_idx
+      assert korreksjon_idx < personinntekt_idx
+    end
+
+    test "rentekostnadPaaForetaksgjeld is emitted when rentekostnader > 0" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      # sample_regnskap has rentekostnader: 10_000
+      assert xml =~ "<rentekostnadPaaForetaksgjeld>"
+
+      # Must appear inside fordeltBeregnetPersoninntekt, before andelAvPersoninntektTilordnetInnehaver
+      assert xml =~
+               ~r{<rentekostnadPaaForetaksgjeld>.*?<andelAvPersoninntektTilordnetInnehaver>}s
+    end
+
+    test "rentekostnadPaaForetaksgjeld is omitted when rentekostnader is 0" do
+      regnskap_uten_renter =
+        put_in(
+          sample_regnskap(),
+          [Access.key(:resultatregnskap), Access.key(:finansposter), Access.key(:rentekostnader)],
+          0
+        )
+
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          regnskap_uten_renter,
+          skattepliktig_type: :personlig
+        )
+
+      refute xml =~ "<rentekostnadPaaForetaksgjeld>"
+    end
+
+    test "rentekostnadPaaForetaksgjeld is omitted for upersonlig regardless of rentekostnader" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+      refute xml =~ "<rentekostnadPaaForetaksgjeld>"
+    end
   end
 
   describe "generer_request_xml/3" do
@@ -1125,6 +1235,30 @@ defmodule Wenche.SkattemeldingXmlTest do
         )
 
       assert_xml_valid!(xml, "#{@xsd_dir}/naeringsspesifikasjon_v6_ekstern.xsd")
+    end
+
+    @tag :xsd
+    test "ENK naeringsspesifikasjon (v6, skattepliktig_type: :personlig) validates" do
+      xml =
+        SkattemeldingXml.generer_naeringsspesifikasjon_xml(
+          sample_regnskap(),
+          skattepliktig_type: :personlig
+        )
+
+      assert_xml_valid!(xml, "#{@xsd_dir}/naeringsspesifikasjon_v6_ekstern.xsd")
+    end
+
+    @tag :xsd
+    test "ENK personlig skattemelding (v13) validates" do
+      alias Wenche.SkattemeldingPersonligXml
+
+      xml =
+        SkattemeldingPersonligXml.generer_skattemelding_personlig_xml(
+          sample_regnskap(),
+          partsreferanse: 9001
+        )
+
+      assert_xml_valid!(xml, "#{@xsd_dir}/skattemelding_v13_ekstern.xsd")
     end
 
     defp assert_xml_valid!(xml, schema_path) do

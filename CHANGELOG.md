@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - unreleased
+## [0.4.0] - unreleased
+
+### Added
+
+- **Personlig skattemelding (ENK) submission.** New `Wenche.SkattemeldingPersonligXml`
+  generates the personlig `skattemelding` (v13, "Skattemelding personlige
+  skattepliktige", income year 2025) and `Wenche.SkattemeldingPersonlig` orchestrates
+  validation and Altinn 3 submission for an enkeltpersonforetak. The
+  næringsspesifikasjon (v6) and request envelope (v2) are reused: pass
+  `skattepliktig_type: :personlig` to `Wenche.SkattemeldingXml.generer_naeringsspesifikasjon_xml/2`
+  (ENK virksomhetstype + owner-allocated næringsresultat) and
+  `skattemelding_dokumenttype: "skattemeldingPersonlig"` to
+  `generer_request_xml/3`. `Wenche.SkdSkattemeldingClient.hent_utkast_referanse_personlig/3`
+  resolves the draft `partsreferanse` + dokumentreferanse.
+- Vendored `skattemelding_v13_ekstern.xsd` in `priv/xsd/skatteetaten/`.
+- `Wenche.Maskinporten.build_jwt_grant/3` accepts an optional `:resource` opt
+  that sets the resource claim in the JWT grant (required by BRREG's
+  authenticated roller API).
+
+## [0.3.0] - 2026-05-28
 
 ### Added
 

@@ -262,10 +262,14 @@ defmodule Wenche.AltinnClient do
   end
 
   @doc """
-  Advances the instance to the signing step and returns the Altinn inbox URL
-  where the user can sign with BankID/ID-Porten.
+  Advances the instance one process step (`PUT /process/next`) and returns the
+  configured Altinn inbox URL for later inspection.
 
-  Signing requires ID-Porten and cannot be done programmatically.
+  For Skatteetaten flows such as skattemelding and MVA, callers typically use
+  an Altinn platform token derived from ID-porten and call this for the final
+  process transition. Manual signing in the Altinn inbox is only relevant for
+  app flows that explicitly stop on a confirmation/signing task, for example
+  revisor confirmation.
 
   Returns `{:ok, inbox_url}` or `{:error, reason}`.
   """
