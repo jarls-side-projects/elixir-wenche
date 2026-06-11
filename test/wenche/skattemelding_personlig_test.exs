@@ -294,6 +294,36 @@ defmodule Wenche.SkattemeldingPersonligTest do
     test "returns an empty map when no EtterBeregning document is present" do
       assert SkattemeldingPersonlig.parse_etter_beregning("<resp/>") == %{}
     end
+
+    test "extracts personinntekt and the § 12-13 carry-forward to next year" do
+      # Shape mirrors skattemelding_v13's SamordnetPersoninntekt: a negative
+      # personinntekt this year produces a positive aaretsFremfoerbareNegativPersoninntekt
+      # to carry to next year.
+      inner = """
+      <skattemelding>
+        <partsreferanse>9001</partsreferanse>
+        <inntektsaar>2025</inntektsaar>
+        <naering><naeringsinntektMv><samordnetPersoninntekt>
+          <aaretsFremfoerbareNegativPersoninntekt><beloep><beloepSomHeltall>30000</beloepSomHeltall></beloep></aaretsFremfoerbareNegativPersoninntekt>
+          <personinntekt><beloep><beloepSomHeltall>0</beloepSomHeltall></beloep></personinntekt>
+        </samordnetPersoninntekt></naeringsinntektMv></naering>
+      </skattemelding>
+      """
+
+      body = """
+      <resp><dokument>
+        <type>skattemeldingPersonligEtterBeregning</type>
+        <encoding>utf-8</encoding>
+        <content>#{Base.encode64(inner)}</content>
+      </dokument></resp>
+      """
+
+      assert %{
+               partsreferanse: 9001,
+               personinntekt: 0,
+               aarets_fremfoerbare_negativ_personinntekt: 30_000
+             } = SkattemeldingPersonlig.parse_etter_beregning(body)
+    end
   end
 
   # Decodes the base64 <content> of the first <dokument> — the skattemelding document.

@@ -198,8 +198,17 @@ defmodule Wenche.SkattemeldingPersonlig do
   Parses Skatteetaten's `/valider` response, extracting SKD-computed values from
   the embedded `skattemeldingPersonligEtterBeregning` document.
 
-  Best-effort: returns a map with the fields that are present (`partsreferanse`,
-  `inntektsaar`), or `%{}` when the etter-beregning document is absent.
+  Best-effort: returns a map with the fields that are present, or `%{}` when the
+  etter-beregning document is absent. Keys:
+
+    * `:partsreferanse`, `:inntektsaar`
+    * `:personinntekt` — the assessed beregnet personinntekt
+      (`samordnetPersoninntekt/personinntekt/beloep/beloepSomHeltall`)
+    * `:aarets_fremfoerbare_negativ_personinntekt` — the negative beregnet
+      personinntekt SKD computed as carry-forward *to next year* (skatteloven
+      § 12-13). Persist this and submit it next year as
+      `:fremfoerbar_negativ_personinntekt` (see `bygg_xmls/3`). Absent/`nil`
+      when this year's personinntekt is non-negative.
   """
   @spec parse_etter_beregning(binary()) :: map()
   def parse_etter_beregning(body) when is_binary(body) do
@@ -210,7 +219,10 @@ defmodule Wenche.SkattemeldingPersonlig do
       inner ->
         %{
           partsreferanse: extract_int(inner, "partsreferanse"),
-          inntektsaar: extract_int(inner, "inntektsaar")
+          inntektsaar: extract_int(inner, "inntektsaar"),
+          personinntekt: extract_beloep_som_heltall(inner, "personinntekt"),
+          aarets_fremfoerbare_negativ_personinntekt:
+            extract_beloep_som_heltall(inner, "aaretsFremfoerbareNegativPersoninntekt")
         }
     end
   end
@@ -279,6 +291,19 @@ defmodule Wenche.SkattemeldingPersonlig do
 
   defp extract_int(xml, tag) do
     case Regex.run(~r{<(?:\w+:)?#{tag}>\s*([-0-9]+)\s*</(?:\w+:)?#{tag}>}, xml) do
+      [_, num] -> String.to_integer(num)
+      _ -> nil
+    end
+  end
+
+  # Extracts the integer from a `BeloepSomHeltallMedSkattemessigeEgenskaper`-shaped
+  # element: `<tag><beloep><beloepSomHeltall>N</beloepSomHeltall></beloep></tag>`.
+  # Returns the first match's integer, or nil when the element is absent.
+  defp extract_beloep_som_heltall(xml, tag) do
+    pattern =
+      ~r{<(?:\w+:)?#{tag}>\s*<(?:\w+:)?beloep>\s*<(?:\w+:)?beloepSomHeltall>\s*([-0-9]+)\s*</(?:\w+:)?beloepSomHeltall>}s
+
+    case Regex.run(pattern, xml) do
       [_, num] -> String.to_integer(num)
       _ -> nil
     end
