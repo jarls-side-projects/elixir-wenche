@@ -259,11 +259,11 @@ defmodule Wenche.SkdSkattemeldingClient do
          %{xml: inner_xml, skattemelding_id: sm_id, naering_id: ne_id} <-
            parse_forespoersel_response(body),
          {:ok, partsnummer} <- partsid_fun.(inner_xml) do
-      # NB: the draft contains taxpayer data (fnr/partsreferanse, figures).
       # Logged at :info to inspect what Skatteetaten pre-fills (e.g. whether the
-      # draft carries fremfoerbarNegativPersoninntektFraTidligereAar). Intended
-      # for test/verification environments.
-      Logger.info("Skattemelding utkast (draft) response for #{year}/#{org_nr}:\n#{inner_xml}")
+      # draft carries fremfoerbarNegativPersoninntektFraTidligereAar). Keyed on
+      # the year only — for the personlig flow `org_nr` is the owner's fnr, which
+      # is never logged. The body carries `partsreferanse` for correlation.
+      Logger.info("Skattemelding utkast (draft) response for #{year}:\n#{inner_xml}")
 
       {:ok, %{partsnummer: partsnummer, skattemelding_id: sm_id, naering_id: ne_id}}
     else
