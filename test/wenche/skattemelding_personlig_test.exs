@@ -82,6 +82,30 @@ defmodule Wenche.SkattemeldingPersonligTest do
     end
   end
 
+  describe "bygg_xmls/3 forwards :fremfoerbar_negativ_personinntekt" do
+    @ref %{partsnummer: 4711, skattemelding_id: nil, naering_id: nil}
+
+    test "emits the § 12-13 carry-forward in the personlig skattemelding" do
+      {sm, _ne, _req} =
+        SkattemeldingPersonlig.bygg_xmls(sample_regnskap(), @ref,
+          partsidentifikator: "12345678901",
+          fremfoerbar_negativ_personinntekt: 50_000
+        )
+
+      assert sm =~ "<samordnetPersoninntekt>"
+      assert sm =~ "<beloepSomHeltall>50000</beloepSomHeltall>"
+    end
+
+    test "keeps the minimal shell when no carry-forward is supplied" do
+      {sm, _ne, _req} =
+        SkattemeldingPersonlig.bygg_xmls(sample_regnskap(), @ref,
+          partsidentifikator: "12345678901"
+        )
+
+      refute sm =~ "<naering>"
+    end
+  end
+
   describe "valider/3" do
     setup do
       inner_xml =
