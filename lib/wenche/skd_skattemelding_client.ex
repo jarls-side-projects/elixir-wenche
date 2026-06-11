@@ -13,6 +13,8 @@ defmodule Wenche.SkdSkattemeldingClient do
   `Wenche.Maskinporten.get_skd_skattemelding_token/2`.
   """
 
+  require Logger
+
   alias Wenche.SkattemeldingXml
 
   @forespoersel_response_ns "no:skatteetaten:fastsetting:formueinntekt:skattemeldingognaeringsspesifikasjon:forespoersel:response:v2"
@@ -257,6 +259,12 @@ defmodule Wenche.SkdSkattemeldingClient do
          %{xml: inner_xml, skattemelding_id: sm_id, naering_id: ne_id} <-
            parse_forespoersel_response(body),
          {:ok, partsnummer} <- partsid_fun.(inner_xml) do
+      # NB: the draft contains taxpayer data (fnr/partsreferanse, figures).
+      # Logged at :info to inspect what Skatteetaten pre-fills (e.g. whether the
+      # draft carries fremfoerbarNegativPersoninntektFraTidligereAar). Intended
+      # for test/verification environments.
+      Logger.info("Skattemelding utkast (draft) response for #{year}/#{org_nr}:\n#{inner_xml}")
+
       {:ok, %{partsnummer: partsnummer, skattemelding_id: sm_id, naering_id: ne_id}}
     else
       {:ok, %Req.Response{status: status, body: body}} ->
