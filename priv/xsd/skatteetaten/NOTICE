@@ -1,12 +1,16 @@
-XSD files in this directory are vendored from the Skatteetaten/skattemeldingen
-project (https://github.com/Skatteetaten/skattemeldingen), licensed under the
-Apache License 2.0.
+XSD files in this directory are vendored from Skatteetaten (The Norwegian Tax
+Administration) GitHub projects, licensed under the Apache License 2.0.
 
-Files:
+From Skatteetaten/skattemeldingen (https://github.com/Skatteetaten/skattemeldingen):
   - skattemeldingUpersonlig_v5_ekstern.xsd
   - skattemelding_v13_ekstern.xsd        (personlig skattepliktig — ENK)
   - naeringsspesifikasjon_v6_ekstern.xsd
   - skattemeldingognaeringsspesifikasjonrequest_v2.xsd
+
+From Skatteetaten/api-dokumentasjon (https://github.com/Skatteetaten/api-dokumentasjon,
+static/download/) — the schemas the aksjonærregister API validates RF-1086 against:
+  - aksjonaerregisteroppgaveHovedskjema.xsd   (RF-1086 hovedskjema)
+  - aksjonaerregisteroppgaveUnderskjema.xsd   (RF-1086-U underskjema, per aksjonær)
 
 Bundling here lets wenche's tests validate generated XML against the same
 schemas Skatteetaten uses in /valider and /innsendelse without depending on

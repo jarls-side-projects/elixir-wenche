@@ -20,7 +20,16 @@ defmodule Wenche.Models do
       :forretningsadresse,
       :stiftelsesaar,
       :aksjekapital,
-      kontakt_epost: ""
+      kontakt_epost: "",
+      # Opening balances at 01.01 of the income year (RF-1086 "fjoråret" fields).
+      # Zero for a company founded in the income year.
+      aksjekapital_fjoraret: 0,
+      antall_aksjer_fjoraret: 0,
+      paalydende_fjoraret: 0,
+      innbetalt_kapital_fjoraret: 0,
+      # Share issuances during the income year (stiftelse/nyemisjon), one entry
+      # per event, for the hovedskjema's UtstedelseAvAksjer block.
+      utstedelser: []
     ]
 
     @type t :: %__MODULE__{
@@ -31,7 +40,32 @@ defmodule Wenche.Models do
             forretningsadresse: String.t(),
             stiftelsesaar: integer(),
             aksjekapital: integer(),
-            kontakt_epost: String.t()
+            kontakt_epost: String.t(),
+            aksjekapital_fjoraret: integer(),
+            antall_aksjer_fjoraret: integer(),
+            paalydende_fjoraret: integer(),
+            innbetalt_kapital_fjoraret: integer(),
+            utstedelser: [Wenche.Models.Utstedelse.t()]
+          }
+  end
+
+  defmodule Utstedelse do
+    @moduledoc """
+    A share issuance during the income year (stiftelse/nyemisjon m.v.), for the
+    hovedskjema's company-level UtstedelseAvAksjerIfmStiftelseNyemisjonMv block.
+
+    `ervervstype` is the RF-1086 issuance code. Only "N" (stiftelse/nyemisjon
+    m.v.) is verified against Skatteetaten's published example payload; other
+    codes are not authoritatively documented (the XSD field is free text).
+    """
+    defstruct [:antall, :ervervstype, :dato, :paalydende]
+
+    @type t :: %__MODULE__{
+            antall: integer(),
+            ervervstype: String.t(),
+            # ISO 8601 local datetime, e.g. "2025-01-01T00:00:00"
+            dato: String.t(),
+            paalydende: integer()
           }
   end
 
@@ -357,10 +391,17 @@ defmodule Wenche.Models do
       :navn,
       :fodselsnummer,
       :organisasjonsnummer,
+      # Year-end holdings (this aksjonær's total shares at 31.12).
       :antall_aksjer,
       :aksjeklasse,
       :utbytte_utbetalt,
-      :innbetalt_kapital_per_aksje
+      # Holdings at 01.01 of the income year (AksjerAntallFjoraret). Equals
+      # antall_aksjer when nothing changed during the year; 0 for a brand-new
+      # shareholder who acquired all shares in the income year.
+      antall_aksjer_fjoraret: 0,
+      # Acquisitions ("tilganger") during the income year, one %Tilgang{} per
+      # event, for the underskjema's Transaksjoner block.
+      tilganger: []
     ]
 
     @type t :: %__MODULE__{
@@ -370,7 +411,29 @@ defmodule Wenche.Models do
             antall_aksjer: integer(),
             aksjeklasse: String.t(),
             utbytte_utbetalt: integer(),
-            innbetalt_kapital_per_aksje: integer()
+            antall_aksjer_fjoraret: integer(),
+            tilganger: [Wenche.Models.Tilgang.t()]
+          }
+  end
+
+  defmodule Tilgang do
+    @moduledoc """
+    A single share acquisition during the income year, for the underskjema's
+    KjopArvGaveStiftelseNyemisjonMv (Transaksjoner) block.
+
+    `ervervstype` is the RF-1086 acquisition code. Only "N" (stiftelse/nyemisjon
+    m.v.) is verified against Skatteetaten's published example payload; codes for
+    kjøp/arv/gave are not authoritatively documented (the XSD field is free
+    text), so callers must not emit unverified codes into a real filing.
+    """
+    defstruct [:ervervstype, :ervervsdato, :antall, :anskaffelsesverdi]
+
+    @type t :: %__MODULE__{
+            ervervstype: String.t(),
+            # ISO 8601 local datetime, e.g. "2025-01-01T00:00:00"
+            ervervsdato: String.t(),
+            antall: integer(),
+            anskaffelsesverdi: integer()
           }
   end
 
