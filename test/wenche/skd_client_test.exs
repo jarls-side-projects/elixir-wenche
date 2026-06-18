@@ -10,14 +10,14 @@ defmodule Wenche.SkdClientTest do
       client = SkdClient.new("test-token")
 
       assert client.token == "test-token"
-      assert client.base =~ "api.sits.no"
+      assert client.base =~ "https://api.skatteetaten.no/api/aksjonaerregister/v1"
       assert client.req_options == []
     end
 
     test "creates client with test env" do
       client = SkdClient.new("test-token", env: "test")
 
-      assert client.base =~ "api-test.sits.no"
+      assert client.base =~ "https://api-test.sits.no/api/aksjonaerregister/v1"
     end
 
     test "stores req_options" do

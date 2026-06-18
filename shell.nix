@@ -31,6 +31,6 @@
   '';
 in
   pkgs.mkShell {
-    buildInputs = inputs;
+    packages = inputs;
     shellHook = hooks;
   }

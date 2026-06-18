@@ -13,7 +13,7 @@ defmodule Wenche.SkdClient do
 
   @bases %{
     "test" => "https://api-test.sits.no/api/aksjonaerregister/v1",
-    "prod" => "https://api.sits.no/api/aksjonaerregister/v1"
+    "prod" => "https://api.skatteetaten.no/api/aksjonaerregister/v1"
   }
 
   @doc """
