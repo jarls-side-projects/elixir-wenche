@@ -2,7 +2,7 @@ defmodule Wenche.MixProject do
   use Mix.Project
 
   @version "0.4.0"
-  @source_url "https://github.com/jarls-side-projects/elixir-wenche"
+  @source_url "https://github.com/kontira/elixir-wenche"
 
   def project do
     [
