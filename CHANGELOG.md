@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - unreleased
+## [0.4.0] - 2026-06-20
 
 ### Added
 
@@ -36,6 +36,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Wenche.Maskinporten.build_jwt_grant/3` accepts an optional `:resource` opt
   that sets the resource claim in the JWT grant (required by BRREG's
   authenticated roller API).
+- **`Wenche.SubmissionResult`** — all `send_inn/*` and `valider/*` functions
+  now return a `SubmissionResult` struct bundling the XML documents that were
+  transmitted, the external response body, and the Altinn inbox URL. Lets
+  callers persist a complete audit trail of exactly what was sent to and
+  returned from Altinn / Skatteetaten / BRREG.
+  `AltinnClient.fullfoor_instans/3` now surfaces the final `process/next`
+  response body instead of discarding it.
+- **RF-1086 real transaction data.** `Aksjonaer` gains `antall_aksjer_fjoraret`
+  (prior-year opening balance) and a `tilganger` list — income-year
+  acquisitions each carrying `ervervstype`, `ervervsdato`, `antall`, and
+  `anskaffelsesverdi`. `Selskap` gains the corresponding prior-year
+  opening-balance fields and an `utstedelser` list for the `hovedskjema`.
+  The generator emits one acquisition/issuance element per event (XSD allows
+  `maxOccurs="9999"`). Holdings entirely from prior years go to `Fjoraret`
+  with no current-year event. This resolves two server-side rejections
+  against Skatteetaten: MTRA_004 (acquisition date outside the income year —
+  previously the founding year was used) and MAKH_053 (per-shareholder
+  paid-in capital was 0 while the company total was non-zero).
+- Vendored official RF-1086 XSDs (`aksjonaerregisteroppgaveHovedskjema.xsd`
+  and `aksjonaerregisteroppgaveUnderskjema.xsd`) from Skatteetaten's
+  api-dokumentasjon repository; added `xmllint` validation tests.
+- `Wenche.SkattemeldingPersonlig.parse_etter_beregning/1` now also returns
+  `:personinntekt` and `:aarets_fremfoerbare_negativ_personinntekt` — the
+  § 12-13 negative beregnet personinntekt Skatteetaten computed as carry-forward
+  to the next income year. A filing system should persist this value and pass
+  it as `:fremfoerbar_negativ_personinntekt` the following year.
+
+### Changed
+
+- Draft fetch log (`do_hent_utkast_referanse`) is now keyed on income year
+  only, not on org_nr / fnr, keeping taxpayer identifiers out of application
+  logs for the personlig flow.
+- `do_hent_utkast_referanse` logs the decoded inner draft document at `:info`
+  level, making it possible to inspect what Skatteetaten pre-fills (e.g.
+  whether `fremfoerbarNegativPersoninntektFraTidligereAar` is carried in the
+  ENK utkast).
+
+### Fixed
+
+- Production URL for aksjonærregisteroppgaven in `Wenche.SkdClient` was
+  incorrect; corrected to the right Skatteetaten endpoint.
+- `send_hovedskjema/3` matched only the all-lowercase `"hovedskjemaid"` key
+  but SKD returns `"hovedskjemaId"` (camelCase). A successful 200 response
+  therefore fell through to the `{:hovedskjema_failed, …}` clause. Both
+  casings are now accepted.
 
 ## [0.3.0] - 2026-05-28
 

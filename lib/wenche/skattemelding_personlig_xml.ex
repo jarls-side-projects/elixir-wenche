@@ -28,8 +28,8 @@ defmodule Wenche.SkattemeldingPersonligXml do
     * **Underskudd til fremføring (alminnelig inntekt, skatteloven § 14-6).**
       The business loss is first samordnet against the owner's *other* personal
       income the same year; any remainder carries forward against future
-      alminnelig inntekt. Skatteetaten assesses and *pre-fills* this — kontio
-      does not submit it for an ENK.
+      alminnelig inntekt. Skatteetaten assesses and *pre-fills* this — callers
+      do not submit it for an ENK.
 
     * **Fremførbar negativ personinntekt (skatteloven § 12-13).** Beregnet
       personinntekt (foretaksmodellen — the base for trygdeavgift + trinnskatt)
@@ -50,8 +50,8 @@ defmodule Wenche.SkattemeldingPersonligXml do
   (`fordeltBeregnetPersoninntektFraNaeringsspesifikasjon`, the samordning, and
   the final `personinntekt` — all `erAvledet="true"`). The entry is joined to
   the næringsspesifikasjon's `beregnetPersoninntekt/fordeltBeregnetPersoninntekt`
-  via `identifikatorForFordeltBeregnetPersoninntekt` (kontio mints `"1"` for the
-  single ENK virksomhet — see `Wenche.SkattemeldingXml`). `naeringstype`
+  via `identifikatorForFordeltBeregnetPersoninntekt` (`"1"` for the single ENK
+  virksomhet — see `Wenche.SkattemeldingXml`). `naeringstype`
   defaults to `"annenNaering"` (the kodeliste code for an ordinary,
   non-primary-industry ENK); SKD overrides it from the næringsspesifikasjon as
   it is `erAvledet`.
@@ -77,8 +77,8 @@ defmodule Wenche.SkattemeldingPersonligXml do
 
   # Join key to the næringsspesifikasjon's
   # `beregnetPersoninntekt/fordeltBeregnetPersoninntekt`. Must match the
-  # `identifikatorForFordeltBeregnetPersoninntekt` minted there — kontio emits
-  # `"1"` for the single ENK virksomhet (see `Wenche.SkattemeldingXml`).
+  # `identifikatorForFordeltBeregnetPersoninntekt` emitted by
+  # `Wenche.SkattemeldingXml` — `"1"` for the single ENK virksomhet.
   @default_fordeling_identifikator "1"
 
   @doc """

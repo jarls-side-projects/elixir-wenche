@@ -17,7 +17,7 @@ defmodule Wenche.SkattemeldingPersonlig do
 
   Unlike the AS flow there is **no** 22 % corporate-tax `beregn`: an ENK owner's
   personal tax (trinnskatt, trygdeavgift) is assessed by Skatteetaten. The
-  `skattemessig næringsresultat` is the figure kontio supplies; the assessed
+  `skattemessig næringsresultat` is the figure the caller supplies; the assessed
   result comes back from `/valider`'s etter-beregning.
 
   ## Authentication
@@ -40,7 +40,7 @@ defmodule Wenche.SkattemeldingPersonlig do
   @dokumenttype "skattemeldingPersonlig"
 
   @doc """
-  Computes the figures kontio displays for an ENK næringsspesifikasjon.
+  Computes the ENK næringsspesifikasjon figures.
 
   Returns the skattemessig næringsresultat (regnskapsmessig resultat adjusted by
   any `:permanent_forskjeller`) plus a balance overview. The assessed personal
