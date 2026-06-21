@@ -60,6 +60,7 @@ defmodule Wenche.SkattemeldingXml do
   @kode_andre_aksjer "1350"
   @kode_langsiktige_fordringer "1390"
   @kode_kortsiktige_fordringer "1500"
+  @kode_kortsiktige_investeringer "1800"
   @kode_bankinnskudd "1920"
   @kode_aksjekapital "2000"
   @kode_overkursfond "2020"
@@ -187,6 +188,11 @@ defmodule Wenche.SkattemeldingXml do
           |> Map.get(:formuesverdi_aksjer)
           |> beloep_to_int(:half_up)
 
+        # NB: kortsiktige_investeringer (ikke-markedsbaserte aksjer/verdipapir-
+        # fondsandeler) is a share/fund holding, so its book value is REPLACED
+        # by formuesverdi_aksjer — like the anleggsmidler share lines, it is
+        # deliberately NOT added at face value here. Only bank deposits and
+        # receivables are.
         verdi_foer_rabatt =
           formuesverdi_aksjer +
             b.eiendeler.omloepmidler.bankinnskudd +
@@ -1086,6 +1092,7 @@ defmodule Wenche.SkattemeldingXml do
     omloepsmidler_forekomster =
       []
       |> add_forekomst_bal(om.kortsiktige_fordringer, @kode_kortsiktige_fordringer)
+      |> add_forekomst_bal(om.kortsiktige_investeringer, @kode_kortsiktige_investeringer)
       |> add_forekomst_bal(om.bankinnskudd, @kode_bankinnskudd)
 
     egenkapital_forekomster = egenkapital_forekomster(eog.egenkapital)

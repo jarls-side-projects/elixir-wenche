@@ -61,6 +61,7 @@ defmodule Wenche.SkattemeldingXmlTest do
           },
           omloepmidler: %Omloepmidler{
             kortsiktige_fordringer: 80_000,
+            kortsiktige_investeringer: 120_000,
             bankinnskudd: 300_000
           }
         },
@@ -724,13 +725,22 @@ defmodule Wenche.SkattemeldingXmlTest do
 
       # Skatteetaten validator requires <id> to equal the resultatOgBalanseregnskapstype kode.
       # A mismatch produces avvikstype=idAvvikerFraKrav.
-      for kode <- ["3200", "6700", "8090", "8150", "1350", "1920", "2000", "2050", "2990"] do
+      for kode <- ["3200", "6700", "8090", "8150", "1350", "1800", "1920", "2000", "2050", "2990"] do
         if xml =~ ">#{kode}<" do
           assert xml =~
                    ~r{<id>#{kode}</id>\s*(?:<beloep>|<type>\s*<resultatOgBalanseregnskapstype>#{kode})},
                  "expected <id>#{kode}</id> alongside resultatOgBalanseregnskapstype #{kode}"
         end
       end
+    end
+
+    test "kortsiktige_investeringer is reported on kode 1800, not folded into bankinnskudd" do
+      xml = SkattemeldingXml.generer_naeringsspesifikasjon_xml(sample_regnskap())
+
+      # 120_000 (omløp shares) must land on its own forekomst with id 1800 ...
+      assert xml =~ ~r{<id>1800</id>\s*<beloep>\s*<beloep>\s*<beloep>120000\.00</beloep>}
+      # ... and bankinnskudd (1920) keeps its own 300_000, unchanged.
+      assert xml =~ ~r{<id>1920</id>\s*<beloep>\s*<beloep>\s*<beloep>300000\.00</beloep>}
     end
 
     test "uses 2025 kodeliste codes" do
@@ -751,6 +761,7 @@ defmodule Wenche.SkattemeldingXmlTest do
       assert xml =~ ">1350<"
       assert xml =~ ">1390<"
       assert xml =~ ">1500<"
+      assert xml =~ ">1800<"
       assert xml =~ ">1920<"
       assert xml =~ ">2000<"
       assert xml =~ ">2020<"
@@ -926,7 +937,10 @@ defmodule Wenche.SkattemeldingXmlTest do
 
       # Both the næringsresultat block (beregnetNaeringsinntekt/fordeltBeregnet.../id)
       # and the personinntekt linking field reference id "1".
-      naering_id_idx = :binary.match(xml, "<fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>") |> elem(0)
+      naering_id_idx =
+        :binary.match(xml, "<fordeltBeregnetNaeringsinntektForPersonligSkattepliktigEllerSdf>")
+        |> elem(0)
+
       personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
       assert naering_id_idx < personinntekt_idx
 
@@ -944,7 +958,9 @@ defmodule Wenche.SkattemeldingXmlTest do
 
       naering_idx = :binary.match(xml, "<beregnetNaeringsinntekt>") |> elem(0)
       personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
-      forskjell_idx = :binary.match(xml, "<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>") |> elem(0)
+
+      forskjell_idx =
+        :binary.match(xml, "<forskjellMellomRegnskapsmessigOgSkattemessigVerdi>") |> elem(0)
 
       assert naering_idx < personinntekt_idx
       assert personinntekt_idx < forskjell_idx
@@ -968,7 +984,10 @@ defmodule Wenche.SkattemeldingXmlTest do
 
       # Must appear inside the næringsresultat block, before beregnetPersoninntekt
       naering_idx = :binary.match(xml, "<beregnetNaeringsinntekt>") |> elem(0)
-      korreksjon_idx = :binary.match(xml, "<fordeltSkattemessigResultatEtterKorreksjon>") |> elem(0)
+
+      korreksjon_idx =
+        :binary.match(xml, "<fordeltSkattemessigResultatEtterKorreksjon>") |> elem(0)
+
       personinntekt_idx = :binary.match(xml, "<beregnetPersoninntekt>") |> elem(0)
       assert naering_idx < korreksjon_idx
       assert korreksjon_idx < personinntekt_idx

@@ -347,6 +347,7 @@ defmodule Wenche.Skattemelding do
         },
         omloepmidler: %{
           kortsiktige_fordringer: om.kortsiktige_fordringer,
+          kortsiktige_investeringer: om.kortsiktige_investeringer,
           bankinnskudd: om.bankinnskudd,
           sum: Omloepmidler.sum(om)
         },

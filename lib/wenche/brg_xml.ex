@@ -141,6 +141,25 @@ defmodule Wenche.BrgXml do
     sum_gjeld = LangsiktigGjeld.sum(lg) + KortsiktigGjeld.sum(kg)
     sum_innskutt_ek = ek.aksjekapital + ek.overkursfond
 
+    # Kortsiktige investeringer (ikke-markedsbaserte aksjer/verdipapir-
+    # fondsandeler) are reported under <investering> as andreFinansielleInstrumenter.
+    # The element is optional (minOccurs=0), so omit it entirely when zero.
+    investering_block =
+      if om.kortsiktige_investeringer == 0 and fom.kortsiktige_investeringer == 0 do
+        ""
+      else
+        "\n" <>
+          String.trim_trailing("""
+              <investering>
+          #{linje("andreFinansielleInstrumenter", om.kortsiktige_investeringer, "Kortsiktige investeringer", "29030", "6429", "7123", fom.kortsiktige_investeringer)}
+                <sumInvesteringer>
+                  <aarets orid="6601">#{om.kortsiktige_investeringer}</aarets>
+                  <fjoraarets orid="8018">#{fom.kortsiktige_investeringer}</fjoraarets>
+                </sumInvesteringer>
+              </investering>
+          """)
+      end
+
     xml = """
     <?xml version="1.0" encoding="UTF-8"?>
     <melding xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -262,7 +281,7 @@ defmodule Wenche.BrgXml do
                 </sumFordringer>
               </fordringer>
             </balanseOmloepsmidlerVarerFordringer>
-            <balanseOmloepsmidlerInvesteringerBankinnskuddKontanter>
+            <balanseOmloepsmidlerInvesteringerBankinnskuddKontanter>#{investering_block}
               <bankinnskuddKontanter>
     #{linje("bankinnskuddKontanter", om.bankinnskudd, "Bankinnskudd", "29031", "786", "8019", fom.bankinnskudd)}
                 <sumBankinnskuddKontanter>

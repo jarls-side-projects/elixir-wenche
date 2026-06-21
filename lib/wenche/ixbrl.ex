@@ -166,6 +166,8 @@ defmodule Wenche.Ixbrl do
 
         <tr><td>Kortsiktige fordringer</td>
             <td>#{tag("TradeAndOtherCurrentReceivables", om.kortsiktige_fordringer, "c1")}</td></tr>
+        <tr><td>Kortsiktige investeringer</td>
+            <td>#{tag("OtherCurrentFinancialAssets", om.kortsiktige_investeringer, "c1")}</td></tr>
         <tr><td>Bankinnskudd</td>
             <td>#{tag("CashAndCashEquivalents", om.bankinnskudd, "c1")}</td></tr>
         <tr><td><strong>Sum omløpsmidler</strong></td>

@@ -180,16 +180,22 @@ defmodule Wenche.Models do
 
   defmodule Omloepmidler do
     @moduledoc "Current assets."
-    defstruct kortsiktige_fordringer: 0, bankinnskudd: 0, sum_override: nil
+    defstruct kortsiktige_fordringer: 0,
+              kortsiktige_investeringer: 0,
+              bankinnskudd: 0,
+              sum_override: nil
 
     @type t :: %__MODULE__{
             kortsiktige_fordringer: integer(),
+            kortsiktige_investeringer: integer(),
             bankinnskudd: integer(),
             sum_override: integer() | nil
           }
 
     def sum(%__MODULE__{sum_override: o}) when is_integer(o), do: o
-    def sum(%__MODULE__{} = o), do: o.kortsiktige_fordringer + o.bankinnskudd
+
+    def sum(%__MODULE__{} = o),
+      do: o.kortsiktige_fordringer + o.kortsiktige_investeringer + o.bankinnskudd
   end
 
   defmodule Eiendeler do
